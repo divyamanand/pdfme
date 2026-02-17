@@ -16,6 +16,7 @@ import {
 import { getPlugins } from '../plugins';
 import { NavBar, NavItem } from "../components/NavBar";
 import ExternalButton from "../components/ExternalButton";
+import { SchemaEditor } from "../components/SchemaEditor";
 
 function DesignerApp() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,6 +25,11 @@ function DesignerApp() {
 
   const [editingStaticSchemas, setEditingStaticSchemas] = useState(false);
   const [originalTemplate, setOriginalTemplate] = useState<Template | null>(null);
+  const [schemaEditorOpen, setSchemaEditorOpen] = useState(false);
+  const [schemaJson, setSchemaJson] = useState<string>('[]');
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const isUpdatingFromEditor = useRef(false);
+  const schemaChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const buildDesigner = useCallback(async () => {
     if (!designerRef.current) return;
@@ -68,6 +74,15 @@ function DesignerApp() {
         plugins: getPlugins(),
       });
       designer.current.onSaveTemplate(onSaveTemplate);
+      designer.current.onChangeTemplate((template) => {
+        if (isUpdatingFromEditor.current) {
+          isUpdatingFromEditor.current = false;
+          return;
+        }
+        setSchemaJson(JSON.stringify(template.schemas, null, 2));
+        setSchemaError(null);
+      });
+      setSchemaJson(JSON.stringify(designer.current.getTemplate().schemas, null, 2));
 
     } catch (error) {
       localStorage.removeItem("template");
@@ -121,6 +136,45 @@ function DesignerApp() {
     if (designer.current) {
       designer.current.updateTemplate(getBlankTemplate());
     }
+  };
+
+  const handleSchemaChange = (json: string) => {
+    setSchemaJson(json);
+
+    if (schemaChangeTimerRef.current) clearTimeout(schemaChangeTimerRef.current);
+
+    schemaChangeTimerRef.current = setTimeout(() => {
+      if (!designer.current) return;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(json);
+      } catch (e) {
+        setSchemaError(`JSON parse error: ${(e as Error).message}`);
+        return;
+      }
+
+      if (!Array.isArray(parsed)) {
+        setSchemaError('schemas must be an array (Schema[][])');
+        return;
+      }
+
+      const candidateTemplate: Template = {
+        ...cloneDeep(designer.current.getTemplate()),
+        schemas: parsed as Template['schemas'],
+      };
+
+      try {
+        checkTemplate(candidateTemplate);
+      } catch (e) {
+        setSchemaError(`Validation error: ${(e as Error).message}`);
+        return;
+      }
+
+      setSchemaError(null);
+      isUpdatingFromEditor.current = true;
+      designer.current.updateTemplate(candidateTemplate);
+    }, 400);
   };
 
   const toggleEditingStaticSchemas = () => {
@@ -181,6 +235,10 @@ function DesignerApp() {
     };
   }, [designerRef, buildDesigner]);
 
+  useEffect(() => {
+    if (editingStaticSchemas) setSchemaEditorOpen(false);
+  }, [editingStaticSchemas]);
+
   const navItems: NavItem[] = [
     {
       label: "Lang",
@@ -235,6 +293,18 @@ function DesignerApp() {
           onClick={toggleEditingStaticSchemas}
         >
           {editingStaticSchemas ? "End editing" : "Start editing"}
+        </button>
+      ),
+    },
+    {
+      label: "Edit Schema",
+      content: (
+        <button
+          disabled={editingStaticSchemas}
+          className="px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => setSchemaEditorOpen(true)}
+        >
+          Open Editor
         </button>
       ),
     },
@@ -305,6 +375,13 @@ function DesignerApp() {
     <>
       <NavBar items={navItems} />
       <div ref={designerRef} className="flex-1 w-full" />
+      <SchemaEditor
+        open={schemaEditorOpen}
+        onClose={() => setSchemaEditorOpen(false)}
+        schemaJson={schemaJson}
+        onSchemaChange={handleSchemaChange}
+        error={schemaError}
+      />
     </>
   );
 }
