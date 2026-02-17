@@ -15,7 +15,6 @@ import {
 } from "../helper";
 import { getPlugins } from '../plugins';
 import { NavBar, NavItem } from "../components/NavBar";
-import ExternalButton from "../components/ExternalButton";
 import { SchemaEditor } from "../components/SchemaEditor";
 
 function DesignerApp() {

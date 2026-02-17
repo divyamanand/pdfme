@@ -203,11 +203,12 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
       div.style.cursor = mode === 'designer' ? 'text' : 'default';
 
       // Draw borders for header cells
+      const isFirstRow = headerCell.row === 0;
       const isFirstColumn = headerCell.colStart === 0;
       const isLastColumn = headerCell.colStart + headerCell.colspan === leaves.length;
       const isBottomOfHeader = headerCell.row + headerCell.rowspan === maxDepth;
 
-      setBorder(div, 'Top', arg);
+      if (isFirstRow) setBorder(div, 'Top', arg);
       if (isFirstColumn) setBorder(div, 'Left', arg);
       if (isLastColumn) setBorder(div, 'Right', arg);
       if (typedBody.length === 0 && isBottomOfHeader) {

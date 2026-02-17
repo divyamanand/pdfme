@@ -4,6 +4,7 @@ import { getFallbackFontName, DEFAULT_FONT_NAME } from '@pdfme/common';
 import {
   getDefaultCellStyles,
   getCellPropPanelSchema,
+  getColumnStylesPropPanelSchema,
 } from '../tables/helper.js';
 import { HEX_COLOR_PATTERN } from '../constants.js';
 import {
@@ -22,6 +23,7 @@ export const propPanel: PropPanel<NestedTableSchema> = {
     const font = options.font || { [DEFAULT_FONT_NAME]: { data: '', fallback: true } };
     const fontNames = Object.keys(font);
     const fallbackFontName = getFallbackFontName(font);
+    const leafLabels = getLeafNodes(nestedTableSchema.headerTree || []).map(l => l.label);
 
     return {
       showHead: {
@@ -74,6 +76,13 @@ export const propPanel: PropPanel<NestedTableSchema> = {
         widget: 'Card',
         span: 24,
         properties: getCellPropPanelSchema({ i18n, fallbackFontName, fontNames, isBody: true }),
+      },
+      columnStyles: {
+        title: i18n('schemas.table.columnStyle'),
+        type: 'object',
+        widget: 'Card',
+        span: 24,
+        properties: getColumnStylesPropPanelSchema({ head: leafLabels, i18n }),
       },
       headerTree: {
         title: 'Header Structure',
