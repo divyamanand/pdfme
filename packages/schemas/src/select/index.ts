@@ -3,7 +3,7 @@ import { propPanel as parentPropPanel } from '../text/propPanel.js';
 import { Plugin, PropPanelWidgetProps, SchemaForUI } from '@pdfme/common';
 import text from '../text/index.js';
 import { TextSchema } from '../text/types.js';
-import { ChevronDown } from 'lucide';
+import { ChevronDown, ChevronsUpDown } from 'lucide';
 import { createSvgStr } from '../utils.js';
 
 const selectIcon = createSvgStr(ChevronDown);
@@ -198,7 +198,7 @@ const schema: Plugin<Select> = {
       options: ['option1', 'option2'],
     },
   },
-  icon: selectIcon,
+  icon: createSvgStr(ChevronsUpDown),
 };
 
 export default schema;

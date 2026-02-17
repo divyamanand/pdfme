@@ -2,7 +2,7 @@ import { Plugin, Schema } from '@pdfme/common';
 import svg from '../graphics/svg.js';
 import { isEditable } from '../utils.js';
 import { HEX_COLOR_PATTERN } from '../constants.js';
-import { Square, SquareCheck } from 'lucide';
+import { Square, SquareCheck, SquareCheckBig } from 'lucide';
 import { createSvgStr } from '../utils.js';
 
 const defaultStroke = 'currentColor';
@@ -64,7 +64,7 @@ const schema: Plugin<Checkbox> = {
       color: '#000000',
     },
   },
-  icon: getCheckedIcon(),
+  icon: createSvgStr(SquareCheckBig),
 };
 
 export default schema;

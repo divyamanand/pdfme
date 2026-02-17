@@ -1,9 +1,9 @@
 import { getPlugin } from './helper.js';
 import { createSvgStr } from '../utils.js';
-import { Calendar } from 'lucide';
+import { CalendarDays } from 'lucide';
 
 const type = 'date';
 
-const icon = createSvgStr(Calendar);
+const icon = createSvgStr(CalendarDays);
 
 export default getPlugin({ type, icon });

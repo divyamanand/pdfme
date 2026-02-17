@@ -4,7 +4,7 @@ import type { Plugin } from '@pdfme/common';
 import type { Schema } from '@pdfme/common';
 import type * as CSS from 'csstype';
 import { px2mm } from '@pdfme/common';
-import { Image } from 'lucide';
+import { ImagePlus } from 'lucide';
 import {
   convertForPdfLayoutProps,
   addAlphaToHex,
@@ -195,7 +195,7 @@ const imageSchema: Plugin<ImageSchema> = {
       opacity: DEFAULT_OPACITY,
     },
   },
-  icon: createSvgStr(Image),
+  icon: createSvgStr(ImagePlus),
 };
 
 export default imageSchema;

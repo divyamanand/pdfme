@@ -6,7 +6,7 @@ import {
   createSvgStr,
 } from '../utils.js';
 import { HEX_COLOR_PATTERN } from '../constants.js';
-import { Minus } from 'lucide';
+import { Spline } from 'lucide';
 
 const DEFAULT_LINE_COLOR = '#000000';
 const HIT_POINT_HEIGHT = 16;
@@ -89,6 +89,6 @@ const lineSchema: Plugin<LineSchema> = {
       color: DEFAULT_LINE_COLOR,
     },
   },
-  icon: createSvgStr(Minus),
+  icon: createSvgStr(Spline),
 };
 export default lineSchema;

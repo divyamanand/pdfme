@@ -2,7 +2,7 @@ import { Plugin, Schema, mm2pt } from '@pdfme/common';
 import { HEX_COLOR_PATTERN } from '../constants.js';
 import { hex2PrintingColor, convertForPdfLayoutProps, createSvgStr } from '../utils.js';
 import { toRadians } from '@pdfme/pdf-lib';
-import { Circle, Square } from 'lucide';
+import { Circle, RectangleHorizontal } from 'lucide';
 
 interface ShapeSchema extends Schema {
   type: 'ellipse' | 'rectangle';
@@ -142,7 +142,7 @@ const getPropPanelSchema = (type: 'rectangle' | 'ellipse') => ({
 export const rectangle = {
   ...shape,
   propPanel: getPropPanelSchema('rectangle'),
-  icon: createSvgStr(Square),
+  icon: createSvgStr(RectangleHorizontal),
 };
 
 export const ellipse = {
