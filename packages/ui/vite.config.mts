@@ -7,6 +7,11 @@ export default defineConfig(({ mode }) => {
   return {
     define: { 'process.env.NODE_ENV': JSON.stringify(mode) },
     plugins: [react(), tsconfigPaths({ root: '.' }), cssInjectedByJsPlugin()],
+    resolve: {
+      alias: {
+        lucide: '../../node_modules/lucide/dist/cjs/lucide.js',
+      },
+    },
     build: {
       lib: {
         entry: 'src/index.ts',
@@ -15,7 +20,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     optimizeDeps: {
-      include: ['react', 'react-dom', 'pdfjs-dist', 'antd'],
+      include: ['react', 'react-dom', 'pdfjs-dist', 'antd', 'lucide'],
       exclude: ['@pdfme/common', '@pdfme/schemas', '@pdfme/converter'],
     },
   };

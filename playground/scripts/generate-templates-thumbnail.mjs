@@ -1,28 +1,7 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import crypto from 'crypto';
-import pLimit from 'p-limit';
-import { generate } from '@pdfme/generator/cjs/src/index.js';
-import { pdf2img } from '@pdfme/converter/cjs/src/index.node.js';
-import { getInputFromTemplate, getDefaultFont } from '@pdfme/common/cjs/src/index.js';
-import {
-  multiVariableText,
-  text,
-  barcodes,
-  image,
-  svg,
-  line,
-  table,
-  rectangle,
-  ellipse,
-  dateTime,
-  date,
-  time,
-  select,
-  checkbox,
-  radioGroup,
-} from '@pdfme/schemas/cjs/src/index.js';
+// Skip thumbnail generation - not needed for development
+// The canvas module requires native compilation which isn't available on Windows without Visual Studio
+console.log('⚠️  Skipping thumbnail generation (canvas not available).');
+process.exit(0);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

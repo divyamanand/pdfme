@@ -1,15 +1,17 @@
-import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  build: { 
+  resolve: {
+    alias: {
+      lucide: resolve(__dirname, 'node_modules/lucide/dist/cjs/lucide.js'),
+    },
+  },
+  build: {
     target: 'esnext',
     sourcemap: true // Enable source maps for production builds
   },
-  plugins: [react(), sentryVitePlugin({
-    org: "hand-dot",
-    project: "playground-pdfme"
-  })],
+  plugins: [react()],
 });

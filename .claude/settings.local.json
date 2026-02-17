@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm run build:common:*)",
+      "Bash(npm run build:pdf-lib:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm rebuild:*)",
+      "Bash(npm run build:ui:*)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run generate-templates-list:*)",
+      "Bash(npm run dev:server:*)",
+      "Bash(npm run:*)",
+      "Bash(/e/Dev/campx/pdfme/PLAYGROUND_STARTED.md:*)",
+      "Bash(/e/Dev/campx/pdfme/playground/node_modules/@pdfme/common/package.json:*)",
+      "Bash(/e/Dev/campx/pdfme/playground/node_modules/@pdfme/ui/package.json:*)",
+      "Bash(/e/Dev/campx/pdfme/playground/node_modules/lucide/package.json:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
