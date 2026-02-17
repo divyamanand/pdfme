@@ -21,7 +21,8 @@
       "Bash(grep:*)",
       "Bash(curl:*)",
       "Bash(pkill:*)",
-      "Bash(/tmp/updated_implementation.md:*)"
+      "Bash(/tmp/updated_implementation.md:*)",
+      "Bash(node -e:*)"
     ]
   }
 }
