@@ -3,7 +3,6 @@ import { ToastContainer } from 'react-toastify';
 import Designer from "./routes/Designer";
 import FormAndViewer from "./routes/FormAndViewer";
 import Templates from "./routes/Templates";
-import Header from "./components/Header";
 
 export default function App() {
   const [searchParams] = useSearchParams();
@@ -11,7 +10,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {!isEmbedded && <Header />}
       <Routes>
         <Route path={"/"} element={<Designer />} />
         <Route path={"/designer"} element={<Designer />} />

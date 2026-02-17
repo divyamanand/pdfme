@@ -25,7 +25,7 @@ function DesignerApp() {
 
   const [editingStaticSchemas, setEditingStaticSchemas] = useState(false);
   const [originalTemplate, setOriginalTemplate] = useState<Template | null>(null);
-  const [schemaEditorOpen, setSchemaEditorOpen] = useState(false);
+  const [rightPanelMode, setRightPanelMode] = useState<'fields' | 'schema'>('fields');
   const [schemaJson, setSchemaJson] = useState<string>('[]');
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const isUpdatingFromEditor = useRef(false);
@@ -107,15 +107,7 @@ function DesignerApp() {
       downloadJsonFile(designer.current.getTemplate(), "template");
       toast.success(
         <div>
-          <p>Can you share the template you created? ❤️</p>
-          <a
-            className="text-blue-500 underline"
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://pdfme.com/docs/template-contribution-guide"
-          >
-            See: Template Contribution Guide
-          </a>
+          <p>Template Downloaded!</p>
         </div>
       );
     }
@@ -235,9 +227,6 @@ function DesignerApp() {
     };
   }, [designerRef, buildDesigner]);
 
-  useEffect(() => {
-    if (editingStaticSchemas) setSchemaEditorOpen(false);
-  }, [editingStaticSchemas]);
 
   const navItems: NavItem[] = [
     {
@@ -297,15 +286,31 @@ function DesignerApp() {
       ),
     },
     {
-      label: "Edit Schema",
+      label: "Right Panel",
       content: (
-        <button
-          disabled={editingStaticSchemas}
-          className="px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={() => setSchemaEditorOpen(true)}
-        >
-          Open Editor
-        </button>
+        <div className="flex gap-1">
+          <button
+            className={`px-2 py-1 border rounded w-full text-sm font-medium transition-colors ${
+              rightPanelMode === 'fields'
+                ? 'bg-blue-100 border-blue-300 text-blue-700'
+                : 'bg-white hover:bg-gray-100'
+            }`}
+            onClick={() => setRightPanelMode('fields')}
+          >
+            Fields
+          </button>
+          <button
+            disabled={editingStaticSchemas}
+            className={`px-2 py-1 border rounded w-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              rightPanelMode === 'schema'
+                ? 'bg-blue-100 border-blue-300 text-blue-700'
+                : 'bg-white hover:bg-gray-100'
+            }`}
+            onClick={() => setRightPanelMode('schema')}
+          >
+            Schema
+          </button>
+        </div>
       ),
     },
     {
@@ -343,7 +348,7 @@ function DesignerApp() {
               }`}
             onClick={onDownloadTemplate}
           >
-            DL Template
+            Download JSON
           </button>
           <button
             id="generate-pdf"
@@ -362,26 +367,25 @@ function DesignerApp() {
         </div>
       ),
     },
-    {
-      label: "",
-      content: React.createElement(ExternalButton, {
-        href: "https://github.com/pdfme/pdfme/issues/new?template=template_feedback.yml&title=TEMPLATE_NAME",
-        title: "Feedback this template"
-      }),
-    },
   ];
 
   return (
     <>
       <NavBar items={navItems} />
-      <div ref={designerRef} className="flex-1 w-full" />
-      <SchemaEditor
-        open={schemaEditorOpen}
-        onClose={() => setSchemaEditorOpen(false)}
-        schemaJson={schemaJson}
-        onSchemaChange={handleSchemaChange}
-        error={schemaError}
-      />
+      <div className="flex flex-1 w-full overflow-hidden">
+        <div className="flex-1 min-w-0">
+          <div ref={designerRef} className="w-full h-full" />
+        </div>
+        {rightPanelMode === 'schema' && (
+          <div className="w-80 border-l bg-white overflow-hidden">
+            <SchemaEditor
+              schemaJson={schemaJson}
+              onSchemaChange={handleSchemaChange}
+              error={schemaError}
+            />
+          </div>
+        )}
+      </div>
     </>
   );
 }

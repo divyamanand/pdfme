@@ -19,7 +19,9 @@
       "Bash(/e/Dev/campx/pdfme/playground/node_modules/@pdfme/ui/package.json:*)",
       "Bash(/e/Dev/campx/pdfme/playground/node_modules/lucide/package.json:*)",
       "Bash(grep:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(/tmp/updated_implementation.md:*)"
     ]
   }
 }
