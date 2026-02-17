@@ -5,6 +5,7 @@ import svg from './graphics/svg.js';
 import barcodes from './barcodes/index.js';
 import line from './shapes/line.js';
 import table from './tables/index.js';
+import nestedTable from './nestedTable/index.js';
 import { rectangle, ellipse } from './shapes/rectAndEllipse.js';
 import dateTime from './date/dateTime.js';
 import date from './date/date.js';
@@ -23,6 +24,7 @@ export {
   image,
   svg,
   table,
+  nestedTable,
   barcodes,
   line,
   rectangle,
@@ -37,3 +39,4 @@ export {
 
 // Export utility functions
 export { getDynamicHeightsForTable } from './tables/dynamicTemplate.js';
+export { getDynamicHeightsForNestedTable } from './nestedTable/dynamicTemplate.js';
