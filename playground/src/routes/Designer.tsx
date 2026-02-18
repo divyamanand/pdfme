@@ -321,13 +321,29 @@ function DesignerApp() {
     {
       label: "",
       content: (
-        <button
-          disabled={editingStaticSchemas}
-          className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
-          onClick={openSchemaModal}
-        >
-          Schema Editor
-        </button>
+        <div className="flex gap-2">
+          <button
+            disabled={editingStaticSchemas}
+            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+            onClick={openSchemaModal}
+          >
+            Schema Editor
+          </button>
+          <button
+            disabled={editingStaticSchemas}
+            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+            onClick={() => {
+              if (!designer.current) return;
+              const template = designer.current.getTemplate();
+              const json = JSON.stringify(template, null, 2);
+              navigator.clipboard.writeText(json).then(() => {
+                toast.success("Template copied to clipboard");
+              });
+            }}
+          >
+            Copy Template
+          </button>
+        </div>
       ),
     },
     {
