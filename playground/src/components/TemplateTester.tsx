@@ -29,6 +29,39 @@ interface FieldMeta {
 // Shapes that are always static (no input needed)
 const STATIC_TYPES = new Set(["line", "rectangle", "ellipse"]);
 
+/** Walk a nestedTable headerTree and return leaf-node labels (= data columns). */
+function getLeafLabels(nodes: any[]): string[] {
+  const labels: string[] = [];
+  function walk(node: any) {
+    const children = node.children || [];
+    if (children.length === 0) {
+      labels.push(node.label);
+    } else {
+      children.forEach(walk);
+    }
+  }
+  nodes.forEach(walk);
+  return labels;
+}
+
+/** Try to parse content as a JSON 2D array and map to objects keyed by column headers. */
+function parseTableContent(content: string | undefined, columns: string[]): Array<Record<string, string>> {
+  try {
+    const parsed = JSON.parse(content || '[]');
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map((row: string[]) => {
+        const rowData: Record<string, string> = {};
+        columns.forEach((col, idx) => { rowData[col] = Array.isArray(row) ? (row[idx] ?? '') : ''; });
+        return rowData;
+      });
+    }
+  } catch { /* ignore parse errors */ }
+  // Fallback: single empty row
+  const rowData: Record<string, string> = {};
+  columns.forEach((col) => { rowData[col] = ''; });
+  return [rowData];
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                    */
 /* ------------------------------------------------------------------ */
@@ -60,69 +93,67 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
 
     // Helper function to process schemas
     const processSchema = (schema: Schema) => {
-      // Regular field processing (to build available field names)
-      if (!schema.readOnly && !STATIC_TYPES.has(schema.type) && !seen.has(schema.name)) {
-        seen.add(schema.name);
+      if (schema.readOnly || STATIC_TYPES.has(schema.type) || seen.has(schema.name)) return;
+      seen.add(schema.name);
 
-        // Check if this is a multiVariableText field with variables
-        if (schema.type === 'multiVariableText') {
-          const variables = (schema as any).variables;
-          if (Array.isArray(variables) && variables.length > 0) {
-            // Initialize with empty strings for each variable
-            const varValues: Record<string, string> = {};
-            variables.forEach((v: string) => { varValues[v] = ''; });
-            mvt[schema.name] = varValues;
-            console.log(`Added MVT field: ${schema.name} with variables:`, variables);
-            // Don't add to regular meta — will render separately
-            return;
-          }
+      // ── multiVariableText → per-variable inputs ──
+      if (schema.type === 'multiVariableText') {
+        const variables = (schema as any).variables;
+        if (Array.isArray(variables) && variables.length > 0) {
+          // Pre-fill from content JSON  e.g. {"name":"NAME","dob":"DOB"}
+          let defaults: Record<string, string> = {};
+          try { const p = JSON.parse(schema.content || '{}'); if (p && typeof p === 'object') defaults = p; } catch {}
+          const varValues: Record<string, string> = {};
+          variables.forEach((v: string) => { varValues[v] = defaults[v] ?? ''; });
+          mvt[schema.name] = varValues;
+          return;
         }
-
-        // Check if this is a table or nestedTable field with columns
-        if (schema.type === 'table' || schema.type === 'nestedTable') {
-          const head = (schema as any).head;
-          if (Array.isArray(head) && head.length > 0) {
-            // Initialize with 1 empty row for each column
-            const rowData: Record<string, string> = {};
-            head.forEach((col: string) => { rowData[col] = ''; });
-            tbl[schema.name] = [rowData];
-            console.log(`Added table field: ${schema.name} with columns:`, head);
-            // Don't add to regular meta — will render separately
-            return;
-          }
-        }
-
-        // Add to regular fields
-        meta.push({ name: schema.name, type: schema.type, schema });
-        console.log(`Added field: ${schema.name} (${schema.type})`);
       }
+
+      // ── table → per-row / per-column inputs ──
+      if (schema.type === 'table') {
+        const head = (schema as any).head;
+        if (Array.isArray(head) && head.length > 0) {
+          tbl[schema.name] = parseTableContent(schema.content, head);
+          return;
+        }
+      }
+
+      // ── nestedTable → extract leaf labels from headerTree ──
+      if (schema.type === 'nestedTable') {
+        const headerTree = (schema as any).headerTree;
+        if (Array.isArray(headerTree) && headerTree.length > 0) {
+          const leafLabels = getLeafLabels(headerTree);
+          if (leafLabels.length > 0) {
+            tbl[schema.name] = parseTableContent(schema.content, leafLabels);
+            return;
+          }
+        }
+      }
+
+      // ── everything else → regular input field ──
+      meta.push({ name: schema.name, type: schema.type, schema });
     };
 
     // Extract fields from static schemas (appear on all pages)
     if (staticSchemas) {
-      console.log("Processing staticSchemas:", staticSchemas.length);
-      for (const schema of staticSchemas) {
-        processSchema(schema);
-      }
+      for (const schema of staticSchemas) processSchema(schema);
     }
 
     // Extract fields from page-specific schemas
-    template.schemas.forEach((page, pageIndex) => {
-      console.log(`Processing page ${pageIndex + 1}: ${page.length} schemas`);
-      for (const schema of page) {
-        processSchema(schema);
-      }
+    template.schemas.forEach((page) => {
+      for (const schema of page) processSchema(schema);
     });
 
-    console.log("Final extracted fields:", meta.map(m => ({ name: m.name, type: m.type })));
-    console.log("Final extracted MVT fields:", Object.keys(mvt));
-    console.log("Final extracted table fields:", Object.keys(tbl));
-    console.log("Total unique fields (regular + MVT + tables):", seen.size);
+    // Remove MVT / table keys from the default inputs so they don't shadow dedicated state
+    const cleanedInputs = { ...defaultInputs };
+    Object.keys(mvt).forEach((k) => delete cleanedInputs[k]);
+    Object.keys(tbl).forEach((k) => delete cleanedInputs[k]);
 
     setFieldMeta(meta);
     setMvtInputs(mvt);
     setTableInputs(tbl);
-    setInputs(defaultInputs);
+    setInputs(cleanedInputs);
   }, [open, designer]);
 
   const updateField = (name: string, value: string) => {
@@ -164,7 +195,7 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
   };
 
   const handleCopyJson = async () => {
-    const mergedInputs = { ...inputs, ...mvtInputs };
+    const mergedInputs: Record<string, any> = { ...inputs, ...mvtInputs };
     // Convert table objects to string[][] format
     Object.entries(tableInputs).forEach(([fieldName, rows]) => {
       const firstRow = rows[0];
@@ -190,16 +221,15 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     try {
       const template = designer.current.getTemplate();
       const font = getFontsData();
-      const mergedInputs = { ...inputs, ...mvtInputs };
-      // mvtInputs values are objects like { name: "Divyam", time: "12:00" }
-      // generator serializes them to JSON automatically
-
-      // Convert table objects to string[][] format
+      const mergedInputs: Record<string, any> = { ...inputs, ...mvtInputs };
+      // Convert table objects to string[][] for the generator
       Object.entries(tableInputs).forEach(([fieldName, rows]) => {
         const firstRow = rows[0];
         if (firstRow) {
           const columns = Object.keys(firstRow);
-          mergedInputs[fieldName] = rows.map((row) => columns.map((col) => row[col] || ''));
+          mergedInputs[fieldName] = JSON.stringify(
+            rows.map((row) => columns.map((col) => row[col] || ''))
+          );
         }
       });
 
@@ -312,19 +342,6 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
             </p>
           )}
         </div>
-      );
-    }
-
-    // Table / NestedTable — JSON array input
-    if (field.type === "table" || field.type === "nestedTable") {
-      return (
-        <textarea
-          className="w-full border rounded px-2 py-1 text-sm font-mono resize-y"
-          rows={4}
-          placeholder={`Enter JSON array, e.g., [{"col1": "value1", "col2": "value2"}]`}
-          value={value}
-          onChange={(e) => updateField(field.name, e.target.value)}
-        />
       );
     }
 

@@ -81,10 +81,9 @@ function placeRowsOnPages(
   pages: Schema[][],
 ): number {
   let currentRowIndex = 0;
-  let currentPageIndex = Math.floor(startGlobalY / contentHeight);
-  let currentYInPage = startGlobalY % contentHeight;
-
-  if (currentYInPage < 0) currentYInPage = 0;
+  const clampedStartY = Math.max(0, startGlobalY);
+  let currentPageIndex = Math.floor(clampedStartY / contentHeight);
+  let currentYInPage = clampedStartY % contentHeight;
 
   let actualGlobalEndY = 0;
   const isSplittable = dynamicHeights.length > 1;
