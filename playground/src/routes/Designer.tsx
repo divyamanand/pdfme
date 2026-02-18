@@ -226,6 +226,14 @@ function DesignerApp() {
     };
   }, [designerRef, buildDesigner]);
 
+  useEffect(() => {
+    if (!designerRef.current) return;
+    const sidebar = designerRef.current.querySelector('.pdfme-designer-right-sidebar') as HTMLElement | null;
+    if (sidebar) {
+      sidebar.style.display = rightPanelMode === 'fields' ? '' : 'none';
+    }
+  }, [rightPanelMode]);
+
 
   const navItems: NavItem[] = [
     {
