@@ -27,7 +27,7 @@ import {
   changeSchemas as _changeSchemas,
   useMaxZoom,
 } from '../../helper.js';
-import { useUIPreProcessor, useScrollPageCursor, useInitEvents } from '../../hooks.js';
+import { useUIPreProcessor, useInitEvents } from '../../hooks.js';
 import Root from '../Root.js';
 import ErrorScreen from '../ErrorScreen.js';
 import CtlBar from '../CtlBar.js';
@@ -104,17 +104,8 @@ const TemplateEditor = ({
     // eslint-disable-next-line
   }, [options]);
 
-  useScrollPageCursor({
-    ref: canvasRef,
-    pageSizes,
-    scale,
-    pageCursor,
-    onChangePageCursor: (p) => {
-      setPageCursor(p);
-      onPageCursorChange(p, schemasList.length);
-      onEditEnd();
-    },
-  });
+  // Page switching is handled by the select dropdown in CtlBar.
+  // Scroll-based page switching was removed for better UX.
 
   const commitSchemas = useCallback(
     (newSchemas: SchemaForUI[]) => {

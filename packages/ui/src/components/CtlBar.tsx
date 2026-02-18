@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { Size } from '@pdfme/common';
 // Import icons from lucide-react
 // Note: In tests, these will be mocked by the mock file in __mocks__/lucide-react.js
-import { Plus, Minus, ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
+import { Plus, Minus, Ellipsis } from 'lucide-react';
 
 import type { MenuProps } from 'antd';
 import { theme, Typography, Button, Dropdown } from 'antd';
@@ -58,22 +58,33 @@ type PagerProps = {
 };
 
 const Pager = ({ pageCursor, pageNum, setPageCursor, style }: PagerProps) => {
+  const options = Array.from({ length: pageNum }, (_, i) => i);
   return (
-    <div style={{ display: 'flex', alignItems: 'center' }}>
-      <Button className={UI_CLASSNAME + 'page-prev'} type="text" disabled={pageCursor <= 0} onClick={() => setPageCursor(pageCursor - 1)}>
-        <ChevronLeft size={16} color={style.textStyle.color} />
-      </Button>
-      <Text strong style={style.textStyle}>
-        {pageCursor + 1}/{pageNum}
-      </Text>
-      <Button
-        className={UI_CLASSNAME + 'page-next'}
-        type="text"
-        disabled={pageCursor + 1 >= pageNum}
-        onClick={() => setPageCursor(pageCursor + 1)}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <select
+        className={UI_CLASSNAME + 'page-select'}
+        value={pageCursor}
+        onChange={(e) => setPageCursor(Number(e.target.value))}
+        style={{
+          background: 'transparent',
+          color: style.textStyle.color,
+          border: '1px solid rgba(255,255,255,0.3)',
+          borderRadius: 4,
+          padding: '2px 8px',
+          fontSize: style.textStyle.fontSize,
+          cursor: 'pointer',
+          outline: 'none',
+        }}
       >
-        <ChevronRight size={16} color={style.textStyle.color} />
-      </Button>
+        {options.map((i) => (
+          <option key={i} value={i} style={{ color: '#000' }}>
+            Page {i + 1}
+          </option>
+        ))}
+      </select>
+      <Text strong style={style.textStyle}>
+        / {pageNum}
+      </Text>
     </div>
   );
 };

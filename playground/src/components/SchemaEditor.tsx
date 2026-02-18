@@ -1,3 +1,6 @@
+import CodeMirror from '@uiw/react-codemirror';
+import { json } from '@codemirror/lang-json';
+
 interface SchemaEditorProps {
   schemaJson: string;
   onSchemaChange: (json: string) => void;
@@ -5,6 +8,8 @@ interface SchemaEditorProps {
   currentPage: number;
   totalPages: number;
 }
+
+const jsonExtensions = [json()];
 
 export function SchemaEditor({
   schemaJson,
@@ -33,17 +38,24 @@ export function SchemaEditor({
         </div>
       )}
 
-      {/* Textarea */}
-      <textarea
-        className={`flex-1 p-3 font-mono text-xs resize-none outline-none border-0 overflow-auto ${
-          error ? 'bg-red-50' : 'bg-white'
-        }`}
-        spellCheck={false}
-        autoCorrect="off"
-        autoCapitalize="off"
-        value={schemaJson}
-        onChange={(e) => onSchemaChange(e.target.value)}
-      />
+      {/* CodeMirror Editor */}
+      <div className={`flex-1 overflow-auto ${error ? 'bg-red-50' : ''}`}>
+        <CodeMirror
+          value={schemaJson}
+          extensions={jsonExtensions}
+          onChange={onSchemaChange}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            indentOnInput: true,
+            highlightActiveLine: true,
+            autocompletion: false,
+          }}
+          style={{ height: '100%', fontSize: 12 }}
+        />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { cloneDeep, Template, checkTemplate, Lang, isBlankPdf } from "@pdfme/common";
 import { Designer } from "@pdfme/ui";
 import {
@@ -10,7 +11,6 @@ import {
   readFile,
   handleLoadTemplate,
   generatePDF,
-  downloadJsonFile,
   translations,
 } from "../helper";
 import { getPlugins } from '../plugins';
@@ -30,6 +30,7 @@ function DesignerApp() {
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const isUpdatingFromEditor = useRef(false);
   const schemaChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,6 +78,7 @@ function DesignerApp() {
       });
       designer.current.onSaveTemplate(onSaveTemplate);
       designer.current.onChangeTemplate((template) => {
+        localStorage.setItem("template", JSON.stringify(template));
         if (isUpdatingFromEditor.current) {
           isUpdatingFromEditor.current = false;
           return;
@@ -118,24 +120,13 @@ function DesignerApp() {
     }
   };
 
-  const onDownloadTemplate = () => {
-    if (designer.current) {
-      downloadJsonFile(designer.current.getTemplate(), "template");
-      toast.success(
-        <div>
-          <p>Template Downloaded!</p>
-        </div>
-      );
-    }
-  };
-
   const onSaveTemplate = (template?: Template) => {
     if (designer.current) {
       localStorage.setItem(
         "template",
         JSON.stringify(template || designer.current.getTemplate())
       );
-      toast.success("Saved on local storage");
+      toast.success("Saved");
     }
   };
 
@@ -144,6 +135,7 @@ function DesignerApp() {
     if (designer.current) {
       designer.current.updateTemplate(getBlankTemplate());
     }
+    setShowResetConfirm(false);
   };
 
   const handleSchemaChange = (json: string) => {
@@ -356,37 +348,13 @@ function DesignerApp() {
       content: (
         <div className="flex gap-2">
           <button
-            id="save-local"
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={() => onSaveTemplate()}
-          >
-            Save Local
-          </button>
-          <button
             id="reset-template"
             disabled={editingStaticSchemas}
             className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
               }`}
-            onClick={onResetTemplate}
+            onClick={() => setShowResetConfirm(true)}
           >
             Reset
-          </button>
-        </div>
-      ),
-    },
-    {
-      label: "",
-      content: (
-        <div className="flex gap-2">
-          <button
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={onDownloadTemplate}
-          >
-            Download JSON
           </button>
           <button
             id="generate-pdf"
@@ -426,6 +394,34 @@ function DesignerApp() {
           </div>
         )}
       </div>
+
+      <Dialog open={showResetConfirm} onClose={() => setShowResetConfirm(false)} className="relative z-50">
+        <DialogBackdrop className="fixed inset-0 bg-black/30" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <DialogPanel className="bg-white rounded-lg shadow-xl w-full max-w-sm">
+            <div className="px-5 py-4">
+              <DialogTitle className="text-base font-semibold">Reset Template</DialogTitle>
+              <p className="mt-2 text-sm text-gray-600">
+                This will discard all changes and reset the template to a blank page. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-gray-50 rounded-b-lg">
+              <button
+                className="px-3 py-1.5 border rounded text-sm hover:bg-gray-100"
+                onClick={() => setShowResetConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                onClick={onResetTemplate}
+              >
+                Reset
+              </button>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
     </>
   );
 }
