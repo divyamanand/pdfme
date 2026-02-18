@@ -130,13 +130,14 @@ export const pdfRender = async (arg: PDFRenderProps<NestedTableSchema>) => {
 
   // Create synthetic TableSchema for body rendering
   const leaves = getLeafNodes(schema.headerTree);
+  const leafLabels = leaves.map((n) => n.label);
   const leafWidthPercentages = getLeafWidthPercentages(schema.headerTree);
 
   const syntheticTableSchema: TableSchema = {
     ...schema,
     type: 'table',
     showHead: false,
-    head: [],
+    head: leafLabels,
     headWidthPercentages: leafWidthPercentages,
     position: {
       x: schema.position.x,

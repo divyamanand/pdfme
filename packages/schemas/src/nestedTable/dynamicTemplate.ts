@@ -2,7 +2,7 @@ import { Schema, BasePdf, BlankPdf, CommonOptions, isBlankPdf } from '@pdfme/com
 import { createSingleTable } from '../tables/tableHelper.js';
 import { getBodyWithRange, getBody } from '../tables/helper.js';
 import type { NestedTableSchema } from './types.js';
-import { getTreeDepth, getLeafWidthPercentages } from './treeUtils.js';
+import { getTreeDepth, getLeafNodes, getLeafWidthPercentages } from './treeUtils.js';
 
 function pt2mm(pt: number): number {
   return pt * 0.352778;
@@ -41,12 +41,14 @@ export const getDynamicHeightsForNestedTable = async (
   }
 
   // Create synthetic table schema for body
+  const leaves = getLeafNodes(schema.headerTree);
+  const leafLabels = leaves.map((n) => n.label);
   const leafWidthPercentages = getLeafWidthPercentages(schema.headerTree);
   const syntheticTableSchema: any = {
     ...schema,
     type: 'table',
     showHead: false,
-    head: [],
+    head: leafLabels,
     headWidthPercentages: leafWidthPercentages,
     position: {
       x: schema.position.x,

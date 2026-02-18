@@ -8,7 +8,7 @@ import {
   pt2mm,
   cloneDeep,
 } from '@pdfme/common';
-import { getDynamicHeightsForTable } from '@pdfme/schemas';
+import { getDynamicHeightsForTable, getDynamicHeightsForNestedTable } from '@pdfme/schemas';
 import {
   insertPage,
   preprocessing,
@@ -49,6 +49,8 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         switch (args.schema.type) {
           case 'table':
             return getDynamicHeightsForTable(value, args);
+          case 'nestedTable':
+            return getDynamicHeightsForNestedTable(value, args);
           default:
             return Promise.resolve([args.schema.height]);
         }
