@@ -29,7 +29,9 @@
       "Bash(\"E:\\\\Dev\\\\campx\\\\campx-template-pdf-server\\\\UPDATES_SUMMARY.txt\":*)",
       "Bash(/tmp/completion_summary.txt:*)",
       "Bash(echo:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

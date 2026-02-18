@@ -54,17 +54,15 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
 
     const meta: FieldMeta[] = [];
     const seen = new Set<string>();
-    const allSchemas: Schema[] = [];
     const mvt: Record<string, Record<string, string>> = {};
 
     // Helper function to process schemas
     const processSchema = (schema: Schema) => {
-      allSchemas.push(schema);
-
       // Regular field processing (to build available field names)
       if (!schema.readOnly && !STATIC_TYPES.has(schema.type) && !seen.has(schema.name)) {
         seen.add(schema.name);
-        // Check if this is a multiVariableText field
+
+        // Check if this is a multiVariableText field with variables
         if (schema.type === 'multiVariableText') {
           const variables = (schema as any).variables;
           if (Array.isArray(variables) && variables.length > 0) {
@@ -72,11 +70,15 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
             const varValues: Record<string, string> = {};
             variables.forEach((v: string) => { varValues[v] = ''; });
             mvt[schema.name] = varValues;
+            console.log(`Added MVT field: ${schema.name} with variables:`, variables);
             // Don't add to regular meta — will render separately
             return;
           }
         }
+
+        // Add to regular fields
         meta.push({ name: schema.name, type: schema.type, schema });
+        console.log(`Added field: ${schema.name} (${schema.type})`);
       }
     };
 
@@ -97,6 +99,8 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     });
 
     console.log("Final extracted fields:", meta.map(m => ({ name: m.name, type: m.type })));
+    console.log("Final extracted MVT fields:", Object.keys(mvt));
+    console.log("Total unique fields (regular + MVT):", seen.size);
 
     setFieldMeta(meta);
     setMvtInputs(mvt);
@@ -283,7 +287,7 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
             {/* Input Fields Section */}
-            {fieldMeta.length === 0 ? (
+            {fieldMeta.length === 0 && Object.keys(mvtInputs).length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-8">
                 No variable fields in this template.
               </p>
