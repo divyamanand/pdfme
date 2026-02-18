@@ -12,7 +12,7 @@ import {
   px2mm,
 } from '@pdfme/common';
 import { DndContext } from '@dnd-kit/core';
-import { Modal, InputNumber } from 'antd';
+import { Modal, InputNumber, notification } from 'antd';
 import RightSidebar from './RightSidebar/index.js';
 import LeftSidebar from './LeftSidebar.js';
 import Canvas from './Canvas/index.js';
@@ -27,6 +27,7 @@ import {
   changeSchemas as _changeSchemas,
   useMaxZoom,
   generateUniqueFieldName,
+  getAllSchemaVariables,
 } from '../../helper.js';
 import { useUIPreProcessor, useScrollPageCursor, useInitEvents } from '../../hooks.js';
 import Root from '../Root.js';
@@ -139,6 +140,38 @@ const TemplateEditor = ({
 
   const changeSchemas: ChangeSchemas = useCallback(
     (objs) => {
+      // Guard: reject any `variables` change that would conflict with existing names
+      for (const obj of objs) {
+        if (obj.key === 'variables') {
+          const newVars = obj.value as string[];
+          const excludeId = obj.schemaId;
+
+          // Build the globally-taken-name set:
+          //   all field names + all variables from every other schema (any type)
+          const taken = new Set<string>();
+          const processSchema = (s: SchemaForUI) => {
+            if (s.id === excludeId) return;
+            taken.add(s.name); // field name
+            if (Array.isArray((s as any).variables)) {
+              ((s as any).variables as string[]).forEach((v) => taken.add(v)); // variables
+            }
+          };
+          schemasList.forEach((page) => page.forEach(processSchema));
+
+          const conflicts = newVars.filter((v) => taken.has(v));
+          if (conflicts.length > 0) {
+            notification.error({
+              message: 'Variable name conflict',
+              description: conflicts
+                .map((c) => `"${c}" is already used as a field name or variable.`)
+                .join(' '),
+              duration: 4,
+            });
+            return; // reject the entire changeSchemas call
+          }
+        }
+      }
+
       _changeSchemas({
         objs,
         schemas: schemasList[pageCursor],

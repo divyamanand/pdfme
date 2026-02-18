@@ -93,15 +93,30 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
             continue;
           }
           const rawInput = input[staticSchema.name];
-          const value = staticSchema.readOnly
-            ? replacePlaceholders({
-                content: staticSchema.content || '',
-                variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
-                schemas: schemas, // Use the properly typed schemas variable
-              })
-            : typeof rawInput === 'object' && rawInput !== null
-              ? JSON.stringify(rawInput)
-              : ((rawInput || staticSchema.content || '') as string);
+          let value: string;
+          if (staticSchema.readOnly) {
+            value = replacePlaceholders({
+              content: staticSchema.content || '',
+              variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
+              schemas: schemas, // Use the properly typed schemas variable
+            });
+          } else if (
+            rawInput == null &&
+            Array.isArray((staticSchema as any).variables) &&
+            ((staticSchema as any).variables as string[]).length > 0 &&
+            ((staticSchema as any).variables as string[]).some((v) => v in input)
+          ) {
+            // Flat input: collect declared variables from top-level input keys
+            const collected: Record<string, string> = {};
+            ((staticSchema as any).variables as string[]).forEach((v) => {
+              collected[v] = String(input[v] ?? '');
+            });
+            value = JSON.stringify(collected);
+          } else if (typeof rawInput === 'object' && rawInput !== null) {
+            value = JSON.stringify(rawInput);
+          } else {
+            value = (rawInput || staticSchema.content || '') as string;
+          }
 
           staticSchema.position = {
             x: staticSchema.position.x + boundingBoxLeft,
@@ -136,15 +151,30 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           continue;
         }
         const rawInput = input[name];
-        const value: string = schema.readOnly
-          ? replacePlaceholders({
-              content: schema.content || '',
-              variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
-              schemas: schemas, // Use the properly typed schemas variable
-            })
-          : typeof rawInput === 'object' && rawInput !== null
-            ? JSON.stringify(rawInput)
-            : ((rawInput || '') as string);
+        let value: string;
+        if (schema.readOnly) {
+          value = replacePlaceholders({
+            content: schema.content || '',
+            variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
+            schemas: schemas, // Use the properly typed schemas variable
+          });
+        } else if (
+          rawInput == null &&
+          Array.isArray((schema as any).variables) &&
+          ((schema as any).variables as string[]).length > 0 &&
+          ((schema as any).variables as string[]).some((v) => v in input)
+        ) {
+          // Flat input: collect declared variables from top-level input keys
+          const collected: Record<string, string> = {};
+          ((schema as any).variables as string[]).forEach((v) => {
+            collected[v] = String(input[v] ?? '');
+          });
+          value = JSON.stringify(collected);
+        } else if (typeof rawInput === 'object' && rawInput !== null) {
+          value = JSON.stringify(rawInput);
+        } else {
+          value = (rawInput || '') as string;
+        }
 
         schema.position = {
           x: schema.position.x + boundingBoxLeft,

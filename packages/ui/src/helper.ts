@@ -76,6 +76,28 @@ export const getAllFieldNames = (schemasList: SchemaForUI[][], staticSchemas?: S
  * Check if a field name is unique across all pages and static schemas
  * Optionally exclude a specific schema ID (for editing)
  */
+/**
+ * Returns a Set of all variable names declared across all schemas in the template
+ * (any schema type that has a non-empty `variables: string[]` property),
+ * optionally excluding the schema being edited (identified by excludeSchemaId).
+ */
+export const getAllSchemaVariables = (
+  schemasList: SchemaForUI[][],
+  staticSchemas?: SchemaForUI[],
+  excludeSchemaId?: string,
+): Set<string> => {
+  const vars = new Set<string>();
+  const collect = (s: SchemaForUI) => {
+    if (s.id === excludeSchemaId) return;
+    if (Array.isArray((s as any).variables)) {
+      ((s as any).variables as string[]).forEach((v) => vars.add(v));
+    }
+  };
+  staticSchemas?.forEach(collect);
+  schemasList.forEach((page) => page.forEach(collect));
+  return vars;
+};
+
 export const isFieldNameUnique = (
   name: string,
   schemasList: SchemaForUI[][],
@@ -99,6 +121,11 @@ export const isFieldNameUnique = (
       }
     }
   }
+
+  // Also reject if the proposed name is already declared as a variable
+  // in any other schema (any type), to preserve the flat input namespace
+  const allVars = getAllSchemaVariables(schemasList, staticSchemas, excludeId);
+  if (allVars.has(name)) return false;
 
   return true;
 };
