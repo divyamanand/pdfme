@@ -34,6 +34,7 @@ const STATIC_TYPES = new Set(["line", "rectangle", "ellipse", "table", "nestedTa
 /* ------------------------------------------------------------------ */
 export function TemplateTester({ open, onClose, designer }: TemplateTesterProps) {
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [mvtInputs, setMvtInputs] = useState<Record<string, Record<string, string>>>({});
   const [fieldMeta, setFieldMeta] = useState<FieldMeta[]>([]);
   const [generating, setGenerating] = useState(false);
 
@@ -44,15 +45,17 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     const template = designer.current.getTemplate();
     const defaultInputs = getInputFromTemplate(template)[0] ?? {};
 
+    const staticSchemas = (template as any).staticSchemas as Schema[] | undefined;
     console.log("Template structure:", {
       pages: template.schemas.length,
-      staticSchemas: template.staticSchemas?.length ?? 0,
+      staticSchemas: staticSchemas?.length ?? 0,
       totalSchemas: template.schemas.reduce((sum, page) => sum + page.length, 0),
     });
 
     const meta: FieldMeta[] = [];
     const seen = new Set<string>();
     const allSchemas: Schema[] = [];
+    const mvt: Record<string, Record<string, string>> = {};
 
     // Helper function to process schemas
     const processSchema = (schema: Schema) => {
@@ -61,14 +64,26 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
       // Regular field processing (to build available field names)
       if (!schema.readOnly && !STATIC_TYPES.has(schema.type) && !seen.has(schema.name)) {
         seen.add(schema.name);
+        // Check if this is a multiVariableText field
+        if (schema.type === 'multiVariableText') {
+          const variables = (schema as any).variables;
+          if (Array.isArray(variables) && variables.length > 0) {
+            // Initialize with empty strings for each variable
+            const varValues: Record<string, string> = {};
+            variables.forEach((v: string) => { varValues[v] = ''; });
+            mvt[schema.name] = varValues;
+            // Don't add to regular meta — will render separately
+            return;
+          }
+        }
         meta.push({ name: schema.name, type: schema.type, schema });
       }
     };
 
     // Extract fields from static schemas (appear on all pages)
-    if (template.staticSchemas) {
-      console.log("Processing staticSchemas:", template.staticSchemas.length);
-      for (const schema of template.staticSchemas) {
+    if (staticSchemas) {
+      console.log("Processing staticSchemas:", staticSchemas.length);
+      for (const schema of staticSchemas) {
         processSchema(schema);
       }
     }
@@ -84,6 +99,7 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     console.log("Final extracted fields:", meta.map(m => ({ name: m.name, type: m.type })));
 
     setFieldMeta(meta);
+    setMvtInputs(mvt);
     setInputs(defaultInputs);
   }, [open, designer]);
 
@@ -91,8 +107,16 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     setInputs((prev) => ({ ...prev, [name]: value }));
   };
 
+  const updateMvtField = (fieldName: string, varName: string, value: string) => {
+    setMvtInputs((prev) => ({
+      ...prev,
+      [fieldName]: { ...prev[fieldName], [varName]: value },
+    }));
+  };
+
   const handleCopyJson = async () => {
-    const json = JSON.stringify([inputs], null, 2);
+    const mergedInputs = { ...inputs, ...mvtInputs };
+    const json = JSON.stringify([mergedInputs], null, 2);
     try {
       await navigator.clipboard.writeText(json);
       toast.success("Input JSON copied to clipboard");
@@ -107,9 +131,12 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     try {
       const template = designer.current.getTemplate();
       const font = getFontsData();
+      const mergedInputs = { ...inputs, ...mvtInputs };
+      // mvtInputs values are objects like { name: "Divyam", time: "12:00" }
+      // generator serializes them to JSON automatically
       const pdf = await generate({
         template,
-        inputs: [inputs],
+        inputs: [mergedInputs],
         options: { font, lang: "en", title: "pdfme" },
         plugins: getPlugins(),
       });
@@ -219,19 +246,6 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
       );
     }
 
-    // Multiline for multiVariableText or long default content
-    if (field.type === "multiVariableText") {
-      return (
-        <textarea
-          className="w-full border rounded px-2 py-1 text-sm resize-y"
-          rows={3}
-          placeholder="Enter text with variables like {firstName} {lastName}"
-          value={value}
-          onChange={(e) => updateField(field.name, e.target.value)}
-        />
-      );
-    }
-
     // Default: text input for all other types
     return (
       <input
@@ -289,6 +303,39 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
                           </span>
                         </label>
                         {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* MVT fields — per-variable inputs */}
+                {Object.keys(mvtInputs).length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Multi-Variable Text Fields
+                    </h3>
+                    {Object.entries(mvtInputs).map(([fieldName, vars]) => (
+                      <div key={fieldName}>
+                        <label className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium">{fieldName}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">
+                            multi-variable text
+                          </span>
+                        </label>
+                        <div className="space-y-1 pl-2 border-l-2 border-purple-200">
+                          {Object.entries(vars).map(([varName, varValue]) => (
+                            <div key={varName} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500 w-20 shrink-0">{varName}</span>
+                              <input
+                                type="text"
+                                className="flex-1 border rounded px-2 py-1 text-sm"
+                                placeholder={`Enter ${varName}...`}
+                                value={varValue}
+                                onChange={(e) => updateMvtField(fieldName, varName, e.target.value)}
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

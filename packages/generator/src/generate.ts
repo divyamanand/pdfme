@@ -92,13 +92,16 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           if (!render) {
             continue;
           }
+          const rawInput = input[staticSchema.name];
           const value = staticSchema.readOnly
             ? replacePlaceholders({
                 content: staticSchema.content || '',
                 variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
                 schemas: schemas, // Use the properly typed schemas variable
               })
-            : staticSchema.content || '';
+            : typeof rawInput === 'object' && rawInput !== null
+              ? JSON.stringify(rawInput)
+              : ((rawInput || staticSchema.content || '') as string);
 
           staticSchema.position = {
             x: staticSchema.position.x + boundingBoxLeft,
@@ -132,13 +135,16 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         if (!render) {
           continue;
         }
+        const rawInput = input[name];
         const value: string = schema.readOnly
           ? replacePlaceholders({
               content: schema.content || '',
               variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
               schemas: schemas, // Use the properly typed schemas variable
             })
-          : ((input[name] || '') as string);
+          : typeof rawInput === 'object' && rawInput !== null
+            ? JSON.stringify(rawInput)
+            : ((rawInput || '') as string);
 
         schema.position = {
           x: schema.position.x + boundingBoxLeft,
