@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { Template, checkTemplate, getInputFromTemplate, Lang } from "@pdfme/common";
 import { Form, Viewer } from "@pdfme/ui";
 import {
@@ -27,6 +28,8 @@ function FormAndViewerApp() {
   const [mode, setMode] = useState<Mode>(
     (localStorage.getItem("mode") as Mode) ?? "form"
   );
+  const [showSetInputs, setShowSetInputs] = useState(false);
+  const [inputsText, setInputsText] = useState("");
 
   const buildUi = useCallback(async (mode: Mode) => {
     if (!uiRef.current) return;
@@ -97,13 +100,19 @@ function FormAndViewerApp() {
 
   const onSetInputs = () => {
     if (ui.current) {
-      const prompt = window.prompt("Enter Inputs JSONString") || "";
-      try {
-        const json = isJsonString(prompt) ? JSON.parse(prompt) : [{}];
-        ui.current.setInputs(json);
-      } catch (e) {
-        alert(e);
-      }
+      setInputsText(JSON.stringify(ui.current.getInputs(), null, 2));
+      setShowSetInputs(true);
+    }
+  };
+
+  const onConfirmSetInputs = () => {
+    if (!ui.current) return;
+    try {
+      const json = isJsonString(inputsText) ? JSON.parse(inputsText) : [{}];
+      ui.current.setInputs(json);
+      setShowSetInputs(false);
+    } catch (e) {
+      toast.error(`${e}`);
     }
   };
 
@@ -250,6 +259,37 @@ function FormAndViewerApp() {
     <>
       <NavBar items={navItems} />
       <div ref={uiRef} className="flex-1 w-full" />
+
+      <Dialog open={showSetInputs} onClose={() => setShowSetInputs(false)} className="relative z-50">
+        <DialogBackdrop className="fixed inset-0 bg-black/30" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <DialogPanel className="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]">
+            <div className="px-4 py-3 border-b">
+              <DialogTitle className="text-sm font-semibold">Set Inputs JSON</DialogTitle>
+            </div>
+            <textarea
+              className="flex-1 p-3 font-mono text-xs resize-none outline-none min-h-[200px]"
+              spellCheck={false}
+              value={inputsText}
+              onChange={(e) => setInputsText(e.target.value)}
+            />
+            <div className="flex justify-end gap-2 px-4 py-3 border-t">
+              <button
+                className="px-3 py-1.5 border rounded text-sm hover:bg-gray-100"
+                onClick={() => setShowSetInputs(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                onClick={onConfirmSetInputs}
+              >
+                Apply
+              </button>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
     </>
   );
 }

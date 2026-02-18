@@ -15,6 +15,7 @@ import {
 } from "../helper";
 import { getPlugins } from '../plugins';
 import { NavBar, NavItem } from "../components/NavBar";
+import { PageSettings } from "../components/PageSettings";
 import { SchemaEditor } from "../components/SchemaEditor";
 
 function DesignerApp() {
@@ -27,6 +28,8 @@ function DesignerApp() {
   const [rightPanelMode, setRightPanelMode] = useState<'fields' | 'schema'>('fields');
   const [schemaJson, setSchemaJson] = useState<string>('[]');
   const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const isUpdatingFromEditor = useRef(false);
   const schemaChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,10 +81,24 @@ function DesignerApp() {
           isUpdatingFromEditor.current = false;
           return;
         }
-        setSchemaJson(JSON.stringify(template.schemas, null, 2));
+        const page = designer.current?.getPageCursor() ?? 0;
+        setCurrentPage(page);
+        setTotalPages(template.schemas.length);
+        setSchemaJson(JSON.stringify(template.schemas[page] ?? [], null, 2));
         setSchemaError(null);
       });
-      setSchemaJson(JSON.stringify(designer.current.getTemplate().schemas, null, 2));
+      designer.current.onPageChange(({ currentPage: page, totalPages: total }) => {
+        setCurrentPage(page);
+        setTotalPages(total);
+        const template = designer.current?.getTemplate();
+        if (template) {
+          setSchemaJson(JSON.stringify(template.schemas[page] ?? [], null, 2));
+          setSchemaError(null);
+        }
+      });
+      const initTemplate = designer.current.getTemplate();
+      setTotalPages(initTemplate.schemas.length);
+      setSchemaJson(JSON.stringify(initTemplate.schemas[0] ?? [], null, 2));
 
     } catch (error) {
       localStorage.removeItem("template");
@@ -146,13 +163,18 @@ function DesignerApp() {
       }
 
       if (!Array.isArray(parsed)) {
-        setSchemaError('schemas must be an array (Schema[][])');
+        setSchemaError('schemas must be an array (Schema[])');
         return;
       }
 
+      const currentTemplate = cloneDeep(designer.current.getTemplate());
+      const page = designer.current.getPageCursor();
+      const newSchemas = [...currentTemplate.schemas];
+      newSchemas[page] = parsed as Template['schemas'][number];
+
       const candidateTemplate: Template = {
-        ...cloneDeep(designer.current.getTemplate()),
-        schemas: parsed as Template['schemas'],
+        ...currentTemplate,
+        schemas: newSchemas,
       };
 
       try {
@@ -253,6 +275,15 @@ function DesignerApp() {
             </option>
           ))}
         </select>
+      ),
+    },
+    {
+      label: "Page",
+      content: (
+        <PageSettings
+          disabled={editingStaticSchemas}
+          designer={designer}
+        />
       ),
     },
     {
@@ -389,6 +420,8 @@ function DesignerApp() {
               schemaJson={schemaJson}
               onSchemaChange={handleSchemaChange}
               error={schemaError}
+              currentPage={currentPage}
+              totalPages={totalPages}
             />
           </div>
         )}

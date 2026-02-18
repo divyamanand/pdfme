@@ -1,6 +1,7 @@
 import { Template, Font, checkTemplate, getInputFromTemplate, getDefaultFont } from '@pdfme/common';
 import { Form, Viewer, Designer } from '@pdfme/ui';
 import { generate } from '@pdfme/generator';
+import { toast } from 'react-toastify';
 import { getPlugins } from './plugins';
 
 export function fromKebabCase(str: string): string {
@@ -79,9 +80,7 @@ export const handleLoadTemplate = (
         currentRef.updateTemplate(t);
       })
       .catch((e) => {
-        alert(`Invalid template file.
---------------------------
-${e}`);
+        toast.error(`Invalid template file: ${e}`);
       });
   }
 };
@@ -125,7 +124,7 @@ export const generatePDF = async (currentRef: Designer | Form | Viewer | null) =
     const blob = new Blob([pdf.buffer], { type: 'application/pdf' });
     window.open(URL.createObjectURL(blob));
   } catch (e) {
-    alert(e + '\n\nCheck the console for full stack trace');
+    toast.error(`${e}\n\nCheck the console for full stack trace`);
     throw e;
   }
 };

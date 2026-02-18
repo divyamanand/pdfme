@@ -2,12 +2,16 @@ interface SchemaEditorProps {
   schemaJson: string;
   onSchemaChange: (json: string) => void;
   error: string | null;
+  currentPage: number;
+  totalPages: number;
 }
 
 export function SchemaEditor({
   schemaJson,
   onSchemaChange,
   error,
+  currentPage,
+  totalPages,
 }: SchemaEditorProps) {
   return (
     <div className="flex flex-col h-full bg-white border-l">
@@ -16,7 +20,8 @@ export function SchemaEditor({
         <div className="flex flex-col gap-1">
           <h3 className="text-sm font-semibold">Schema JSON</h3>
           <p className="text-xs text-gray-600">
-            Editing <code className="bg-gray-100 px-1 py-0.5 rounded">template.schemas</code>
+            Page {currentPage + 1} of {totalPages} &mdash;{' '}
+            <code className="bg-gray-100 px-1 py-0.5 rounded">template.schemas[{currentPage}]</code>
           </p>
         </div>
       </div>

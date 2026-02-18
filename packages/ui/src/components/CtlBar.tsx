@@ -98,6 +98,7 @@ type CtlBarProps = {
   zoomLevel: number;
   setZoomLevel: (zoom: number) => void;
   addPageAfter?: () => void;
+  clonePageAfter?: () => void;
   removePage?: () => void;
 };
 
@@ -113,6 +114,7 @@ const CtlBar = (props: CtlBarProps) => {
     zoomLevel,
     setZoomLevel,
     addPageAfter,
+    clonePageAfter,
     removePage,
   } = props;
 
@@ -121,6 +123,12 @@ const CtlBar = (props: CtlBarProps) => {
     contextMenuItems.push({
       key: '1',
       label: <div onClick={addPageAfter}>{i18n('addPageAfter')}</div>,
+    });
+  }
+  if (clonePageAfter) {
+    contextMenuItems.push({
+      key: '3',
+      label: <div onClick={clonePageAfter}>{i18n('clonePage')}</div>,
     });
   }
   if (removePage && pageNum > 1 && pageCursor !== 0) {

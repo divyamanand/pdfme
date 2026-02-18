@@ -31,6 +31,7 @@ export const Dict = z.object({
   commitBulkUpdateFieldName: z.string(),
   bulkUpdateFieldName: z.string(),
   addPageAfter: z.string(),
+  clonePage: z.string(),
   removePage: z.string(),
   removePageConfirm: z.string(),
   // --------------------validation-------------------

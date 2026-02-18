@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import type { SidebarProps } from '../../../../types.js';
 import { DESIGNER_CLASSNAME } from '../../../../constants.js';
 import { I18nContext } from '../../../../contexts.js';
-import { Input, Typography, Button } from 'antd';
+import { Input, Typography, Button, Modal } from 'antd';
 import SelectableSortableContainer from './SelectableSortableContainer.js';
 import { SidebarBody, SidebarFooter, SidebarFrame, SidebarHeader } from '../layout.js';
 
@@ -29,7 +29,7 @@ const ListView = (
   const commitBulk = () => {
     const names = fieldNamesValue.split('\n');
     if (names.length !== schemas.length) {
-      alert(i18n('errorBulkUpdateFieldName'));
+      Modal.error({ title: i18n('errorOccurred'), content: i18n('errorBulkUpdateFieldName') });
     } else {
       changeSchemas(
         names.map((value, index) => ({
@@ -60,6 +60,16 @@ const ListView = (
             wrap="off"
             value={fieldNamesValue}
             onChange={(e) => setFieldNamesValue(e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              const target = e.target as HTMLTextAreaElement;
+              const pos = target.selectionStart;
+              const lineIndex = target.value.substring(0, pos).split('\n').length - 1;
+              if (lineIndex >= 0 && lineIndex < schemas.length) {
+                onChangeHoveringSchemaId(schemas[lineIndex].id);
+              }
+            }}
             style={{
               height: '100%',
               width: '100%',

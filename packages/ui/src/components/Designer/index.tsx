@@ -12,6 +12,7 @@ import {
   px2mm,
 } from '@pdfme/common';
 import { DndContext } from '@dnd-kit/core';
+import { Modal, InputNumber } from 'antd';
 import RightSidebar from './RightSidebar/index.js';
 import LeftSidebar from './LeftSidebar.js';
 import Canvas from './Canvas/index.js';
@@ -253,17 +254,53 @@ const TemplateEditor = ({
 
   const handleRemovePage = () => {
     if (pageCursor === 0) return;
-    if (!window.confirm(i18n('removePageConfirm'))) return;
-
-    const _schemasList = cloneDeep(schemasList);
-    _schemasList.splice(pageCursor, 1);
-    void updatePage(_schemasList, pageCursor - 1);
+    Modal.confirm({
+      title: i18n('removePage'),
+      content: i18n('removePageConfirm'),
+      okText: i18n('removePage'),
+      cancelText: i18n('cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => {
+        const _schemasList = cloneDeep(schemasList);
+        _schemasList.splice(pageCursor, 1);
+        void updatePage(_schemasList, pageCursor - 1);
+      },
+    });
   };
 
   const handleAddPageAfter = () => {
     const _schemasList = cloneDeep(schemasList);
     _schemasList.splice(pageCursor + 1, 0, []);
     void updatePage(_schemasList, pageCursor + 1);
+  };
+
+  const handleClonePageAfter = () => {
+    let cloneCount = 1;
+    Modal.confirm({
+      title: i18n('clonePage'),
+      icon: null,
+      content: (
+        <div style={{ marginTop: 8 }}>
+          <InputNumber
+            min={1}
+            max={100}
+            defaultValue={1}
+            style={{ width: '100%' }}
+            onChange={(value) => { cloneCount = value ?? 1; }}
+          />
+        </div>
+      ),
+      okText: i18n('clonePage'),
+      cancelText: i18n('cancel'),
+      onOk: () => {
+        if (cloneCount < 1) return;
+        const _schemasList = cloneDeep(schemasList);
+        const pageToClone = cloneDeep(schemasList[pageCursor]);
+        const clones = Array.from({ length: cloneCount }, () => cloneDeep(pageToClone));
+        _schemasList.splice(pageCursor + 1, 0, ...clones);
+        void updatePage(_schemasList, pageCursor + 1);
+      },
+    });
   };
 
   if (prevTemplate !== template) {
@@ -282,7 +319,7 @@ const TemplateEditor = ({
     return <ErrorScreen size={size} error={error} />;
   }
   const pageManipulation = isBlankPdf(template.basePdf)
-    ? { addPageAfter: handleAddPageAfter, removePage: handleRemovePage }
+    ? { addPageAfter: handleAddPageAfter, clonePageAfter: handleClonePageAfter, removePage: handleRemovePage }
     : {};
 
   return (
