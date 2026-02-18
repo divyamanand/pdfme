@@ -6,6 +6,7 @@ import barcodes from './barcodes/index.js';
 import line from './shapes/line.js';
 import table from './tables/index.js';
 import nestedTable from './nestedTable/index.js';
+import expressionField from './expressionField/index.js';
 import { rectangle, ellipse } from './shapes/rectAndEllipse.js';
 import dateTime from './date/dateTime.js';
 import date from './date/date.js';
@@ -25,6 +26,7 @@ export {
   svg,
   table,
   nestedTable,
+  expressionField,
   barcodes,
   line,
   rectangle,

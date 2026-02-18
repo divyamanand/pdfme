@@ -7,6 +7,7 @@ import {
   line,
   table,
   nestedTable,
+  expressionField,
   rectangle,
   ellipse,
   dateTime,
@@ -21,6 +22,7 @@ import { signature } from './signature';
 export const getPlugins = () => {
   return {
     Text: text,
+    'Expression Field': expressionField,
     'Multi-Variable Text': multiVariableText,
     Table: table,
     'Nested Table': nestedTable,

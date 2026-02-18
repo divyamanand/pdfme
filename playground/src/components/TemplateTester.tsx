@@ -5,13 +5,18 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { X, Copy, FileText } from "lucide-react";
+import { X, Copy, FileText, AlertCircle } from "lucide-react";
 import { getInputFromTemplate, Schema } from "@pdfme/common";
 import { generate } from "@pdfme/generator";
 import { Designer } from "@pdfme/ui";
 import { toast } from "react-toastify";
 import { getFontsData } from "../helper";
 import { getPlugins } from "../plugins";
+import {
+  extractVariablesFromExpression,
+  getAvailableFieldNames,
+  categorizeVariables,
+} from "../utils/expressionVariableExtractor";
 
 interface TemplateTesterProps {
   open: boolean;
@@ -25,6 +30,14 @@ interface FieldMeta {
   schema: Schema;
 }
 
+interface ExpressionFieldInfo {
+  fieldName: string;
+  requiredVariables: string[];
+  providedVariables: string[]; // Variables already defined in other fields
+  missingVariables: string[]; // Variables that need input
+  expression: string;
+}
+
 // Shapes and table types that are always static (no input needed)
 const STATIC_TYPES = new Set(["line", "rectangle", "ellipse", "table", "nestedTable"]);
 
@@ -34,6 +47,7 @@ const STATIC_TYPES = new Set(["line", "rectangle", "ellipse", "table", "nestedTa
 export function TemplateTester({ open, onClose, designer }: TemplateTesterProps) {
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [fieldMeta, setFieldMeta] = useState<FieldMeta[]>([]);
+  const [expressionFields, setExpressionFields] = useState<ExpressionFieldInfo[]>([]);
   const [generating, setGenerating] = useState(false);
 
   // Build fields when dialog opens
@@ -50,17 +64,26 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     });
 
     const meta: FieldMeta[] = [];
+    const expressionFieldsList: ExpressionFieldInfo[] = [];
     const seen = new Set<string>();
+    const allSchemas: Schema[] = [];
+
+    // Helper function to process schemas
+    const processSchema = (schema: Schema) => {
+      allSchemas.push(schema);
+
+      // Regular field processing (to build available field names)
+      if (!schema.readOnly && !STATIC_TYPES.has(schema.type) && !seen.has(schema.name)) {
+        seen.add(schema.name);
+        meta.push({ name: schema.name, type: schema.type, schema });
+      }
+    };
 
     // Extract fields from static schemas (appear on all pages)
     if (template.staticSchemas) {
       console.log("Processing staticSchemas:", template.staticSchemas.length);
       for (const schema of template.staticSchemas) {
-        if (schema.readOnly) continue;
-        if (STATIC_TYPES.has(schema.type)) continue;
-        if (seen.has(schema.name)) continue;
-        seen.add(schema.name);
-        meta.push({ name: schema.name, type: schema.type, schema });
+        processSchema(schema);
       }
     }
 
@@ -68,17 +91,39 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     template.schemas.forEach((page, pageIndex) => {
       console.log(`Processing page ${pageIndex + 1}: ${page.length} schemas`);
       for (const schema of page) {
-        if (schema.readOnly) continue;
-        if (STATIC_TYPES.has(schema.type)) continue;
-        if (seen.has(schema.name)) continue;
-        seen.add(schema.name);
-        meta.push({ name: schema.name, type: schema.type, schema });
+        processSchema(schema);
+      }
+    });
+
+    // Get available field names for variable matching
+    const availableFieldNames = getAvailableFieldNames(allSchemas);
+
+    // Now process expression fields with knowledge of available field names
+    allSchemas.forEach((schema) => {
+      if (schema.type === "expressionField" && schema.content) {
+        const requiredVariables = extractVariablesFromExpression(schema.content);
+        if (requiredVariables.length > 0) {
+          const { provided, missing } = categorizeVariables(
+            requiredVariables,
+            availableFieldNames
+          );
+          expressionFieldsList.push({
+            fieldName: schema.name || "unnamed",
+            requiredVariables,
+            providedVariables: provided,
+            missingVariables: missing,
+            expression: schema.content,
+          });
+        }
       }
     });
 
     console.log("Final extracted fields:", meta.map(m => ({ name: m.name, type: m.type })));
+    console.log("Expression fields found:", expressionFieldsList);
+    console.log("Available field names for expressions:", Array.from(availableFieldNames));
 
     setFieldMeta(meta);
+    setExpressionFields(expressionFieldsList);
     setInputs(defaultInputs);
   }, [open, designer]);
 
@@ -262,23 +307,124 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            {fieldMeta.length === 0 ? (
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+            {/* Expression Fields Info Section */}
+            {expressionFields.length > 0 && (
+              <div className="space-y-3 pb-4 border-b">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <AlertCircle size={16} className="text-blue-600" />
+                  Calculated Fields (Expression Fields)
+                </h3>
+                <div className="space-y-3">
+                  {expressionFields.map((exprField) => {
+                    // Check which missing variables still need input
+                    const stillMissingVars = exprField.missingVariables.filter(
+                      (v) => !inputs[v]
+                    );
+                    const isSatisfied = stillMissingVars.length === 0;
+
+                    return (
+                      <div
+                        key={exprField.fieldName}
+                        className="p-3 bg-blue-50 border border-blue-200 rounded"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-900">
+                            {exprField.fieldName}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${
+                              isSatisfied
+                                ? "bg-green-100 text-green-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {isSatisfied ? "✓ Ready" : "⚠ Incomplete"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 mb-3 font-mono bg-white rounded px-2 py-1">
+                          {exprField.expression}
+                        </p>
+
+                        {/* Provided Variables (from other fields) */}
+                        {exprField.providedVariables.length > 0 && (
+                          <div className="mb-2">
+                            <p className="text-xs text-gray-600 mb-1">
+                              Provided by other fields:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {exprField.providedVariables.map((v) => (
+                                <span
+                                  key={v}
+                                  className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium"
+                                  title={`Variable '${v}' is provided by an input field`}
+                                >
+                                  ✓ {v}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Missing Variables (need input) */}
+                        {exprField.missingVariables.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-600 mb-1">
+                              Requires input:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {exprField.missingVariables.map((v) => {
+                                const hasInput = inputs[v];
+                                return (
+                                  <span
+                                    key={v}
+                                    className={`text-xs px-2 py-1 rounded-full ${
+                                      hasInput
+                                        ? "bg-green-100 text-green-700 font-medium"
+                                        : "bg-red-100 text-red-700 font-medium"
+                                    }`}
+                                  >
+                                    {hasInput ? "✓ " : "❌ "}
+                                    {v}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Input Fields Section */}
+            {fieldMeta.length === 0 && expressionFields.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-8">
                 No variable fields in this template.
               </p>
             ) : (
-              fieldMeta.map((field) => (
-                <div key={field.name}>
-                  <label className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium">{field.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
-                      {field.type}
-                    </span>
-                  </label>
-                  {renderField(field)}
-                </div>
-              ))
+              <>
+                {fieldMeta.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Input Fields
+                    </h3>
+                    {fieldMeta.map((field) => (
+                      <div key={field.name}>
+                        <label className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium">{field.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
+                            {field.type}
+                          </span>
+                        </label>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
