@@ -1,6 +1,7 @@
 import multiVariableText from './multiVariableText/index.js';
 import text from './text/index.js';
 import image from './graphics/image.js';
+import signature from './graphics/signature.js';
 import svg from './graphics/svg.js';
 import barcodes from './barcodes/index.js';
 import line from './shapes/line.js';
@@ -23,6 +24,7 @@ export {
   text,
   multiVariableText,
   image,
+  signature,
   svg,
   table,
   nestedTable,

@@ -28,9 +28,15 @@ export const getDynamicHeightsForNestedTable = async (
   const singleRowHeight = pt2mm(fontSize) * lineHeight + (padding.top || 0) + (padding.bottom || 0);
   const headerHeight = schema.showHead ? maxDepth * singleRowHeight : 0;
 
-  // Get body
+  // Extract leaf column labels for object-row normalisation
+  const leaves = getLeafNodes(schema.headerTree);
+  const leafLabels = leaves.map((n) => n.label);
+
+  // Get body (supports both string[][] and {col:val}[] input)
   const body =
-    schema.__bodyRange?.start === 0 ? getBody(value) : getBodyWithRange(value, schema.__bodyRange);
+    schema.__bodyRange?.start === 0
+      ? getBody(value, leafLabels)
+      : getBodyWithRange(value, schema.__bodyRange, leafLabels);
 
   const typedBody: string[][] = Array.isArray(body)
     ? body.map((row) => (Array.isArray(row) ? row.map((cell) => String(cell)) : []))
@@ -41,8 +47,6 @@ export const getDynamicHeightsForNestedTable = async (
   }
 
   // Create synthetic table schema for body
-  const leaves = getLeafNodes(schema.headerTree);
-  const leafLabels = leaves.map((n) => n.label);
   const leafWidthPercentages = getLeafWidthPercentages(schema.headerTree);
   const syntheticTableSchema: any = {
     ...schema,

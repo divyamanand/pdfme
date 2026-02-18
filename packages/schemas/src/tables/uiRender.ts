@@ -204,8 +204,8 @@ const resetEditingPosition = () => {
 
 export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
   const { rootElement, onChange, schema, value, mode, scale} = arg;
-  const body = getBody(value);
-  const bodyWidthRange = getBodyWithRange(value, schema.__bodyRange);
+  const body = getBody(value, schema.head);
+  const bodyWidthRange = getBodyWithRange(value, schema.__bodyRange, schema.head);
   const table = await createSingleTable(bodyWidthRange, arg);
   const showHead = table.settings.showHead;
 

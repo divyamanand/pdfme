@@ -121,6 +121,7 @@ export const pdfRender = async (arg: PDFRenderProps<TableSchema>) => {
   const body = getBodyWithRange(
     typeof value !== 'string' ? JSON.stringify(value || '[]') : value,
     schema.__bodyRange,
+    schema.head,
   );
 
   // Create a properly typed CreateTableArgs object

@@ -199,18 +199,39 @@ export const getColumnStylesPropPanelSchema = ({
   },
 });
 
-export const getBody = (value: string | string[][]): string[][] => {
+export const getBody = (value: string | string[][], columns?: string[]): string[][] => {
+  let rows: unknown[];
   if (typeof value === 'string') {
-    return JSON.parse(value || '[]') as string[][];
+    rows = JSON.parse(value || '[]') as unknown[];
+  } else {
+    rows = (value as unknown[]) || [];
   }
-  return value || [];
+
+  // Convert object rows to string arrays when column order is provided.
+  // This supports the { colName: value }[] input format in addition to string[][].
+  if (
+    columns &&
+    columns.length > 0 &&
+    Array.isArray(rows) &&
+    rows.length > 0 &&
+    !Array.isArray(rows[0]) &&
+    typeof rows[0] === 'object' &&
+    rows[0] !== null
+  ) {
+    return (rows as Record<string, unknown>[]).map((row) =>
+      columns.map((col) => String(row[col] ?? '')),
+    );
+  }
+
+  return rows as string[][];
 };
 
 export const getBodyWithRange = (
   value: string | string[][],
   range?: { start: number; end?: number | undefined },
+  columns?: string[],
 ) => {
-  const body = getBody(value);
+  const body = getBody(value, columns);
   if (!range) return body;
   return body.slice(range.start, range.end);
 };

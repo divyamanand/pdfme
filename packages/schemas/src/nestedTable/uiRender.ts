@@ -118,6 +118,7 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
   }
 
   const leaves = getLeafNodes(headerTree);
+  const leafLabels = leaves.map((l) => l.label);
   const leafWidthPercentages = getLeafWidthPercentages(headerTree);
   const leafWidthsMm = leafWidthPercentages.map((pct) => (schema.width * pct) / 100);
 
@@ -136,12 +137,11 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
     ...schema,
     type: 'table',
     showHead: false,
-    head: leaves.map((l) => l.label),
+    head: leafLabels,
     headWidthPercentages: leafWidthPercentages,
   };
-
-  const body = getBody(value);
-  const bodyWidthRange = getBodyWithRange(value, schema.__bodyRange);
+  const body = getBody(value, leafLabels);
+  const bodyWidthRange = getBodyWithRange(value, schema.__bodyRange, leafLabels);
 
   const typedBody: string[][] = Array.isArray(bodyWidthRange)
     ? bodyWidthRange.map((row) => (Array.isArray(row) ? row.map((c) => String(c)) : []))
@@ -320,7 +320,7 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
         onChange: (v) => {
           if (!arg.onChange) return;
           const newValue = (Array.isArray(v) ? v[0].value : v.value) as string;
-          const fullBody = getBody(value);
+          const fullBody = getBody(value, leafLabels);
           const startRange = schema.__bodyRange?.start ?? 0;
           fullBody[rowIndex + startRange][colIndex] = newValue;
           arg.onChange({ key: 'content', value: JSON.stringify(fullBody) });

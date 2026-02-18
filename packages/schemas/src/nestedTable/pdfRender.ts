@@ -114,10 +114,15 @@ export const pdfRender = async (arg: PDFRenderProps<NestedTableSchema>) => {
   // Render nested headers
   const headerHeight = await renderNestedHeaders(arg);
 
-  // Prepare body for rendering
+  // Extract leaf column labels for object-row normalisation
+  const leaves = getLeafNodes(schema.headerTree);
+  const leafLabels = leaves.map((n) => n.label);
+
+  // Prepare body for rendering (supports both string[][] and {col:val}[] input)
   const body = getBodyWithRange(
     typeof value !== 'string' ? JSON.stringify(value || '[]') : value,
-    schema.__bodyRange
+    schema.__bodyRange,
+    leafLabels,
   );
 
   const typedBody: string[][] = Array.isArray(body)
@@ -127,10 +132,6 @@ export const pdfRender = async (arg: PDFRenderProps<NestedTableSchema>) => {
   if (typedBody.length === 0) {
     return;
   }
-
-  // Create synthetic TableSchema for body rendering
-  const leaves = getLeafNodes(schema.headerTree);
-  const leafLabels = leaves.map((n) => n.label);
   const leafWidthPercentages = getLeafWidthPercentages(schema.headerTree);
 
   const syntheticTableSchema: TableSchema = {

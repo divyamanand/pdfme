@@ -15,7 +15,9 @@ export const getDynamicHeightsForTable = async (
   if (args.schema.type !== 'table') return Promise.resolve([args.schema.height]);
   const schema = args.schema as TableSchema;
   const body =
-    schema.__bodyRange?.start === 0 ? getBody(value) : getBodyWithRange(value, schema.__bodyRange);
+    schema.__bodyRange?.start === 0
+      ? getBody(value, schema.head)
+      : getBodyWithRange(value, schema.__bodyRange, schema.head);
   const table = await createSingleTable(body, args);
 
   const baseHeights = schema.showHead
