@@ -17,6 +17,7 @@ import { getPlugins } from '../plugins';
 import { NavBar, NavItem } from "../components/NavBar";
 import { PageSettings } from "../components/PageSettings";
 import { SchemaEditor } from "../components/SchemaEditor";
+import { TemplateTester } from "../components/TemplateTester";
 
 function DesignerApp() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -31,6 +32,7 @@ function DesignerApp() {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showTester, setShowTester] = useState(false);
   const isUpdatingFromEditor = useRef(false);
   const schemaChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -343,6 +345,13 @@ function DesignerApp() {
           >
             Copy Template
           </button>
+          <button
+            disabled={editingStaticSchemas}
+            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+            onClick={() => setShowTester(true)}
+          >
+            Test Template
+          </button>
         </div>
       ),
     },
@@ -399,6 +408,13 @@ function DesignerApp() {
           </DialogPanel>
         </div>
       </Dialog>
+
+      {/* Template Tester Modal */}
+      <TemplateTester
+        open={showTester}
+        onClose={() => setShowTester(false)}
+        designer={designer}
+      />
 
       {/* Reset Confirmation Dialog */}
       <Dialog open={showResetConfirm} onClose={() => setShowResetConfirm(false)} className="relative z-50">

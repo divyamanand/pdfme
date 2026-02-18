@@ -22,7 +22,8 @@
       "Bash(curl:*)",
       "Bash(pkill:*)",
       "Bash(/tmp/updated_implementation.md:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(xargs cat:*)"
     ]
   }
 }
