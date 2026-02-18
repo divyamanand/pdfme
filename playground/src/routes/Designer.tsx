@@ -25,7 +25,7 @@ function DesignerApp() {
 
   const [editingStaticSchemas, setEditingStaticSchemas] = useState(false);
   const [originalTemplate, setOriginalTemplate] = useState<Template | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'fields' | 'schema'>('fields');
+  const [showSchemaModal, setShowSchemaModal] = useState(false);
   const [schemaJson, setSchemaJson] = useState<string>('[]');
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -33,6 +33,13 @@ function DesignerApp() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const isUpdatingFromEditor = useRef(false);
   const schemaChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const syncSchemaJson = useCallback((template: Template, page: number) => {
+    setCurrentPage(page);
+    setTotalPages(template.schemas.length);
+    setSchemaJson(JSON.stringify(template.schemas[page] ?? [], null, 2));
+    setSchemaError(null);
+  }, []);
 
   const buildDesigner = useCallback(async () => {
     if (!designerRef.current) return;
@@ -84,18 +91,14 @@ function DesignerApp() {
           return;
         }
         const page = designer.current?.getPageCursor() ?? 0;
-        setCurrentPage(page);
-        setTotalPages(template.schemas.length);
-        setSchemaJson(JSON.stringify(template.schemas[page] ?? [], null, 2));
-        setSchemaError(null);
+        syncSchemaJson(template, page);
       });
       designer.current.onPageChange(({ currentPage: page, totalPages: total }) => {
         setCurrentPage(page);
         setTotalPages(total);
         const template = designer.current?.getTemplate();
         if (template) {
-          setSchemaJson(JSON.stringify(template.schemas[page] ?? [], null, 2));
-          setSchemaError(null);
+          syncSchemaJson(template, page);
         }
       });
       const initTemplate = designer.current.getTemplate();
@@ -106,7 +109,7 @@ function DesignerApp() {
       localStorage.removeItem("template");
       console.error(error);
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, syncSchemaJson]);
 
   const onChangeBasePDF = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
@@ -182,6 +185,15 @@ function DesignerApp() {
     }, 400);
   };
 
+  const openSchemaModal = () => {
+    if (designer.current) {
+      const template = designer.current.getTemplate();
+      const page = designer.current.getPageCursor();
+      syncSchemaJson(template, page);
+    }
+    setShowSchemaModal(true);
+  };
+
   const toggleEditingStaticSchemas = () => {
     if (!designer.current) return;
 
@@ -239,15 +251,6 @@ function DesignerApp() {
       designer.current?.destroy();
     };
   }, [designerRef, buildDesigner]);
-
-  useEffect(() => {
-    if (!designerRef.current) return;
-    const sidebar = designerRef.current.querySelector('.pdfme-designer-right-sidebar') as HTMLElement | null;
-    if (sidebar) {
-      sidebar.style.display = rightPanelMode === 'fields' ? '' : 'none';
-    }
-  }, [rightPanelMode]);
-
 
   const navItems: NavItem[] = [
     {
@@ -316,31 +319,15 @@ function DesignerApp() {
       ),
     },
     {
-      label: "Right Panel",
+      label: "",
       content: (
-        <div className="flex gap-1">
-          <button
-            className={`px-2 py-1 border rounded w-full text-sm font-medium transition-colors ${
-              rightPanelMode === 'fields'
-                ? 'bg-blue-100 border-blue-300 text-blue-700'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            onClick={() => setRightPanelMode('fields')}
-          >
-            Fields
-          </button>
-          <button
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded w-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              rightPanelMode === 'schema'
-                ? 'bg-blue-100 border-blue-300 text-blue-700'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            onClick={() => setRightPanelMode('schema')}
-          >
-            Schema
-          </button>
-        </div>
+        <button
+          disabled={editingStaticSchemas}
+          className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+          onClick={openSchemaModal}
+        >
+          Schema Editor
+        </button>
       ),
     },
     {
@@ -378,23 +365,26 @@ function DesignerApp() {
   return (
     <>
       <NavBar items={navItems} />
-      <div className="flex flex-1 w-full overflow-hidden">
-        <div className="flex-1 min-w-0">
-          <div ref={designerRef} className="w-full h-full" />
-        </div>
-        {rightPanelMode === 'schema' && (
-          <div className="w-80 border-l bg-white overflow-hidden">
+      <div ref={designerRef} className="flex-1 w-full" />
+
+      {/* Schema Editor Modal */}
+      <Dialog open={showSchemaModal} onClose={() => setShowSchemaModal(false)} className="relative z-50">
+        <DialogBackdrop className="fixed inset-0 bg-black/30" />
+        <div className="fixed inset-4 flex items-center justify-center">
+          <DialogPanel className="bg-white rounded-lg shadow-xl w-full max-w-3xl flex flex-col" style={{ height: '85vh' }}>
             <SchemaEditor
               schemaJson={schemaJson}
               onSchemaChange={handleSchemaChange}
               error={schemaError}
               currentPage={currentPage}
               totalPages={totalPages}
+              onClose={() => setShowSchemaModal(false)}
             />
-          </div>
-        )}
-      </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
 
+      {/* Reset Confirmation Dialog */}
       <Dialog open={showResetConfirm} onClose={() => setShowResetConfirm(false)} className="relative z-50">
         <DialogBackdrop className="fixed inset-0 bg-black/30" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
