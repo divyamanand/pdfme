@@ -6,6 +6,7 @@ import Item from './Item.js';
 import { useMountStatus } from '../../../../hooks.js';
 import { theme } from 'antd';
 import PluginIcon from '../../PluginIcon.js';
+import { isFieldNameUnique } from '../../../../helper.js';
 
 interface Props {
   isSelected: boolean;
@@ -14,6 +15,8 @@ interface Props {
   onEdit: (id: string) => void;
   schema: SchemaForUI;
   schemas: SchemaForUI[];
+  schemasList: SchemaForUI[][];
+  staticSchemas?: SchemaForUI[];
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
@@ -24,6 +27,8 @@ const SelectableSortableItem = ({
   onEdit,
   schema,
   schemas,
+  schemasList,
+  staticSchemas,
   onMouseEnter,
   onMouseLeave,
 }: Props) => {
@@ -47,7 +52,7 @@ const SelectableSortableItem = ({
   let status: undefined | 'is-warning' | 'is-danger';
   if (!schema.name) {
     status = 'is-warning';
-  } else if (schemas.find((s) => schema.name && s.name === schema.name && s.id !== schema.id)) {
+  } else if (!isFieldNameUnique(schema.name, schemasList, staticSchemas, schema.id)) {
     status = 'is-danger';
   }
 

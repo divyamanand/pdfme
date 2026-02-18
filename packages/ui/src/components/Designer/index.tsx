@@ -26,6 +26,7 @@ import {
   getPagesScrollTopByIndex,
   changeSchemas as _changeSchemas,
   useMaxZoom,
+  generateUniqueFieldName,
 } from '../../helper.js';
 import { useUIPreProcessor, useScrollPageCursor, useInitEvents } from '../../hooks.js';
 import Root from '../Root.js';
@@ -294,9 +295,23 @@ const TemplateEditor = ({
       cancelText: i18n('cancel'),
       onOk: () => {
         if (cloneCount < 1) return;
-        const _schemasList = cloneDeep(schemasList);
-        const pageToClone = cloneDeep(schemasList[pageCursor]);
-        const clones = Array.from({ length: cloneCount }, () => cloneDeep(pageToClone));
+        const _schemasList: SchemaForUI[][] = cloneDeep(schemasList);
+        const pageToClone: SchemaForUI[] = cloneDeep(schemasList[pageCursor] ?? []);
+
+        // Generate clones with unique field names
+        const clones: SchemaForUI[][] = Array.from({ length: cloneCount }, () => {
+          const clonedPage = cloneDeep(pageToClone);
+          // Rename all fields to be globally unique and generate new IDs
+          return clonedPage.map((schema): SchemaForUI => {
+            const newName = generateUniqueFieldName(schema.name, _schemasList);
+            return {
+              ...schema,
+              id: uuid(), // Generate new unique ID for each cloned schema
+              name: newName,
+            };
+          });
+        });
+
         _schemasList.splice(pageCursor + 1, 0, ...clones);
         void updatePage(_schemasList, pageCursor + 1);
       },

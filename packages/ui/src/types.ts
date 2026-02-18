@@ -10,6 +10,7 @@ export type SidebarProps = {
   activeElements: HTMLElement[];
   schemas: SchemaForUI[];
   schemasList: SchemaForUI[][];
+  staticSchemas?: SchemaForUI[];
   onSortEnd: (sortedSchemas: SchemaForUI[]) => void;
   onEdit: (id: string) => void;
   onEditEnd: () => void;

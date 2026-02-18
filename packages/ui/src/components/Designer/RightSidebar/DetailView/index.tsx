@@ -12,7 +12,7 @@ import { isBlankPdf } from '@pdfme/common';
 import type { SidebarProps } from '../../../../types.js';
 import { Menu } from 'lucide-react';
 import { I18nContext, PluginsRegistry, OptionsContext } from '../../../../contexts.js';
-import { debounce } from '../../../../helper.js';
+import { debounce, isFieldNameUnique } from '../../../../helper.js';
 import { DESIGNER_CLASSNAME } from '../../../../constants.js';
 import { theme, Typography, Button, Divider } from 'antd';
 import AlignWidget from './AlignWidget.js';
@@ -31,6 +31,7 @@ type DetailViewProps = Pick<
   | 'size'
   | 'schemas'
   | 'schemasList'
+  | 'staticSchemas'
   | 'pageSize'
   | 'basePdf'
   | 'changeSchemas'
@@ -43,7 +44,7 @@ type DetailViewProps = Pick<
 const DetailView = (props: DetailViewProps) => {
   const { token } = theme.useToken();
 
-  const { schemasList, changeSchemas, deselectSchema, activeSchema, pageSize, basePdf } = props;
+  const { schemasList, staticSchemas, changeSchemas, deselectSchema, activeSchema, pageSize, basePdf } = props;
   const form = useForm();
 
   const i18n = useContext(I18nContext);
@@ -100,24 +101,17 @@ const DetailView = (props: DetailViewProps) => {
     form.setValues(values);
   }, [activeSchema]);
 
-  useEffect(() => {
-    uniqueSchemaName.current = (value: string): boolean => {
-      for (const page of schemasList) {
-        for (const s of Object.values(page)) {
-          if (s.name === value && s.id !== activeSchema.id) {
-            return false;
-          }
-        }
-      }
-      return true;
-    };
-  }, [schemasList, activeSchema]);
-
   // Reference to a function that validates schema name uniqueness
   const uniqueSchemaName = useRef(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     (_unused: string): boolean => true,
   );
+
+  useEffect(() => {
+    uniqueSchemaName.current = (value: string): boolean => {
+      return isFieldNameUnique(value, schemasList, staticSchemas, activeSchema.id);
+    };
+  }, [schemasList, staticSchemas, activeSchema]);
 
   // Use proper type for validator function parameter
   const validateUniqueSchemaName = (_: unknown, value: string): boolean =>

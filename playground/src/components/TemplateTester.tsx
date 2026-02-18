@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogBackdrop,
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { X, Copy, FileText, Plus, Minus } from "lucide-react";
+import { X, Copy, FileText } from "lucide-react";
 import { getInputFromTemplate, Schema } from "@pdfme/common";
 import { generate } from "@pdfme/generator";
 import { Designer } from "@pdfme/ui";
@@ -25,124 +25,8 @@ interface FieldMeta {
   schema: Schema;
 }
 
-// Shapes that are always static and have no meaningful input
-const STATIC_TYPES = new Set(["line", "rectangle", "ellipse"]);
-
-function getLeafColumns(nodes: { label: string; children?: any[] }[]): string[] {
-  const leaves: string[] = [];
-  for (const node of nodes) {
-    if (!node.children || node.children.length === 0) {
-      leaves.push(node.label);
-    } else {
-      leaves.push(...getLeafColumns(node.children));
-    }
-  }
-  return leaves;
-}
-
-function parseTableContent(content: string, colCount: number): string[][] {
-  try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.map((row: string[]) =>
-        Array.isArray(row)
-          ? row.map((c) => (typeof c === "string" ? c : String(c ?? "")))
-          : Array(colCount).fill("")
-      );
-    }
-  } catch {
-    // ignore
-  }
-  return [Array(colCount).fill("")];
-}
-
-/* ------------------------------------------------------------------ */
-/*  Table Editor                                                      */
-/* ------------------------------------------------------------------ */
-function TableEditor({
-  columns,
-  value,
-  onChange,
-}: {
-  columns: string[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [rows, setRows] = useState<string[][]>(() =>
-    parseTableContent(value, columns.length)
-  );
-
-  const sync = useCallback(
-    (next: string[][]) => {
-      setRows(next);
-      onChange(JSON.stringify(next));
-    },
-    [onChange]
-  );
-
-  const updateCell = (r: number, c: number, v: string) => {
-    const next = rows.map((row) => [...row]);
-    next[r][c] = v;
-    sync(next);
-  };
-
-  const addRow = () => sync([...rows, Array(columns.length).fill("")]);
-
-  const removeRow = () => {
-    if (rows.length > 1) sync(rows.slice(0, -1));
-  };
-
-  return (
-    <div>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            {columns.map((col, i) => (
-              <th
-                key={i}
-                className="border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-xs"
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td key={ci} className="border border-gray-300 p-0">
-                  <input
-                    className="w-full px-2 py-1 text-sm outline-none"
-                    value={cell}
-                    onChange={(e) => updateCell(ri, ci, e.target.value)}
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="flex gap-2 mt-1">
-        <button
-          type="button"
-          className="flex items-center gap-1 text-xs px-2 py-0.5 border rounded hover:bg-gray-50"
-          onClick={addRow}
-        >
-          <Plus size={12} /> Add Row
-        </button>
-        <button
-          type="button"
-          className="flex items-center gap-1 text-xs px-2 py-0.5 border rounded hover:bg-gray-50"
-          onClick={removeRow}
-          disabled={rows.length <= 1}
-        >
-          <Minus size={12} /> Remove Row
-        </button>
-      </div>
-    </div>
-  );
-}
+// Shapes and table types that are always static (no input needed)
+const STATIC_TYPES = new Set(["line", "rectangle", "ellipse", "table", "nestedTable"]);
 
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                    */
@@ -159,10 +43,19 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     const template = designer.current.getTemplate();
     const defaultInputs = getInputFromTemplate(template)[0] ?? {};
 
+    console.log("Template structure:", {
+      pages: template.schemas.length,
+      staticSchemas: template.staticSchemas?.length ?? 0,
+      totalSchemas: template.schemas.reduce((sum, page) => sum + page.length, 0),
+    });
+
     const meta: FieldMeta[] = [];
     const seen = new Set<string>();
-    for (const page of template.schemas) {
-      for (const schema of page) {
+
+    // Extract fields from static schemas (appear on all pages)
+    if (template.staticSchemas) {
+      console.log("Processing staticSchemas:", template.staticSchemas.length);
+      for (const schema of template.staticSchemas) {
         if (schema.readOnly) continue;
         if (STATIC_TYPES.has(schema.type)) continue;
         if (seen.has(schema.name)) continue;
@@ -170,6 +63,20 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
         meta.push({ name: schema.name, type: schema.type, schema });
       }
     }
+
+    // Extract fields from page-specific schemas
+    template.schemas.forEach((page, pageIndex) => {
+      console.log(`Processing page ${pageIndex + 1}: ${page.length} schemas`);
+      for (const schema of page) {
+        if (schema.readOnly) continue;
+        if (STATIC_TYPES.has(schema.type)) continue;
+        if (seen.has(schema.name)) continue;
+        seen.add(schema.name);
+        meta.push({ name: schema.name, type: schema.type, schema });
+      }
+    });
+
+    console.log("Final extracted fields:", meta.map(m => ({ name: m.name, type: m.type })));
 
     setFieldMeta(meta);
     setInputs(defaultInputs);
@@ -211,31 +118,9 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     }
   };
 
-  const getColumnsForSchema = (schema: Schema): string[] | null => {
-    const s = schema as any;
-    if (schema.type === "table" && Array.isArray(s.head)) {
-      return s.head as string[];
-    }
-    if (schema.type === "nestedTable" && Array.isArray(s.headerTree)) {
-      return getLeafColumns(s.headerTree);
-    }
-    return null;
-  };
 
   const renderField = (field: FieldMeta) => {
     const value = inputs[field.name] ?? "";
-
-    // Table / Nested Table
-    const columns = getColumnsForSchema(field.schema);
-    if (columns && columns.length > 0) {
-      return (
-        <TableEditor
-          columns={columns}
-          value={value}
-          onChange={(v) => updateField(field.name, v)}
-        />
-      );
-    }
 
     // Checkbox
     if (field.type === "checkbox") {
@@ -330,22 +215,24 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     }
 
     // Multiline for multiVariableText or long default content
-    if (field.type === "multiVariableText" || value.length > 80) {
+    if (field.type === "multiVariableText") {
       return (
         <textarea
           className="w-full border rounded px-2 py-1 text-sm resize-y"
           rows={3}
+          placeholder="Enter text with variables like {firstName} {lastName}"
           value={value}
           onChange={(e) => updateField(field.name, e.target.value)}
         />
       );
     }
 
-    // Default: text input
+    // Default: text input for all other types
     return (
       <input
         type="text"
         className="w-full border rounded px-2 py-1 text-sm"
+        placeholder={`Enter ${field.name}...`}
         value={value}
         onChange={(e) => updateField(field.name, e.target.value)}
       />

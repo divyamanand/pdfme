@@ -5,6 +5,7 @@ import { I18nContext } from '../../../../contexts.js';
 import { Input, Typography, Button, Modal } from 'antd';
 import SelectableSortableContainer from './SelectableSortableContainer.js';
 import { SidebarBody, SidebarFooter, SidebarFrame, SidebarHeader } from '../layout.js';
+import { isFieldNameUnique } from '../../../../helper.js';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -13,6 +14,8 @@ const ListView = (
   props: Pick<
     SidebarProps,
     | 'schemas'
+    | 'schemasList'
+    | 'staticSchemas'
     | 'onSortEnd'
     | 'onEdit'
     | 'hoveringSchemaId'
@@ -20,7 +23,7 @@ const ListView = (
     | 'changeSchemas'
   >,
 ) => {
-  const { schemas, onSortEnd, onEdit, hoveringSchemaId, onChangeHoveringSchemaId, changeSchemas } =
+  const { schemas, schemasList, staticSchemas, onSortEnd, onEdit, hoveringSchemaId, onChangeHoveringSchemaId, changeSchemas } =
     props;
   const i18n = useContext(I18nContext);
   const [isBulkUpdateFieldNamesMode, setIsBulkUpdateFieldNamesMode] = useState(false);
@@ -30,16 +33,54 @@ const ListView = (
     const names = fieldNamesValue.split('\n');
     if (names.length !== schemas.length) {
       Modal.error({ title: i18n('errorOccurred'), content: i18n('errorBulkUpdateFieldName') });
-    } else {
-      changeSchemas(
-        names.map((value, index) => ({
-          key: 'name',
-          value,
-          schemaId: schemas[index].id,
-        })),
-      );
-      setIsBulkUpdateFieldNamesMode(false);
+      return;
     }
+
+    // Validate all new names are unique globally (across all pages and static schemas)
+    for (let i = 0; i < names.length; i++) {
+      const newName = names[i].trim();
+      const schemaId = schemas[i].id;
+
+      // Empty names are not allowed
+      if (!newName) {
+        Modal.error({
+          title: i18n('errorOccurred'),
+          content: `Field name at line ${i + 1} cannot be empty.`,
+        });
+        return;
+      }
+
+      // Check for duplicates within the bulk update itself
+      const duplicateInBulk = names.findIndex(
+        (n, idx) => n.trim() === newName && idx !== i
+      );
+      if (duplicateInBulk !== -1) {
+        Modal.error({
+          title: i18n('errorOccurred'),
+          content: `Duplicate field name "${newName}" at lines ${duplicateInBulk + 1} and ${i + 1}.`,
+        });
+        return;
+      }
+
+      // Check for duplicates globally (excluding the current schema being edited)
+      if (!isFieldNameUnique(newName, schemasList, staticSchemas, schemaId)) {
+        Modal.error({
+          title: i18n('errorOccurred'),
+          content: `Field name "${newName}" at line ${i + 1} already exists in another field.`,
+        });
+        return;
+      }
+    }
+
+    // All validations passed - commit the changes
+    changeSchemas(
+      names.map((value, index) => ({
+        key: 'name',
+        value: value.trim(),
+        schemaId: schemas[index].id,
+      })),
+    );
+    setIsBulkUpdateFieldNamesMode(false);
   };
 
   const startBulk = () => {
@@ -80,6 +121,8 @@ const ListView = (
         ) : (
           <SelectableSortableContainer
             schemas={schemas}
+            schemasList={schemasList}
+            staticSchemas={staticSchemas}
             hoveringSchemaId={hoveringSchemaId}
             onChangeHoveringSchemaId={onChangeHoveringSchemaId}
             onSortEnd={onSortEnd}

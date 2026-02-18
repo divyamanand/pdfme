@@ -26,11 +26,17 @@ import PluginIcon from '../../PluginIcon.js';
 const SelectableSortableContainer = (
   props: Pick<
     SidebarProps,
-    'schemas' | 'onEdit' | 'onSortEnd' | 'hoveringSchemaId' | 'onChangeHoveringSchemaId'
+    | 'schemas'
+    | 'schemasList'
+    | 'staticSchemas'
+    | 'onEdit'
+    | 'onSortEnd'
+    | 'hoveringSchemaId'
+    | 'onChangeHoveringSchemaId'
   >,
 ) => {
   const { token } = theme.useToken();
-  const { schemas, onEdit, onSortEnd, hoveringSchemaId, onChangeHoveringSchemaId } = props;
+  const { schemas, schemasList, staticSchemas, onEdit, onSortEnd, hoveringSchemaId, onChangeHoveringSchemaId } = props;
   const [selectedSchemas, setSelectedSchemas] = useState<SchemaForUI[]>([]);
   const [dragOverlaidItems, setClonedItems] = useState<SchemaForUI[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -147,6 +153,8 @@ const SelectableSortableContainer = (
                 }}
                 schema={schema}
                 schemas={schemas}
+                schemasList={schemasList}
+                staticSchemas={staticSchemas}
                 isSelected={isItemSelected(schema.id) || activeId === schema.id}
                 onEdit={onEdit}
                 onSelect={onSelectionChanged}

@@ -48,6 +48,85 @@ export const uuid = () =>
     return v.toString(16);
   });
 
+/**
+ * Get all field names from all pages and static schemas
+ * Used for global field name uniqueness validation
+ */
+export const getAllFieldNames = (schemasList: SchemaForUI[][], staticSchemas?: SchemaForUI[]): string[] => {
+  const names = new Set<string>();
+
+  // Add static schema names
+  if (staticSchemas) {
+    for (const schema of staticSchemas) {
+      names.add(schema.name);
+    }
+  }
+
+  // Add page-specific schema names
+  for (const page of schemasList) {
+    for (const schema of page) {
+      names.add(schema.name);
+    }
+  }
+
+  return Array.from(names);
+};
+
+/**
+ * Check if a field name is unique across all pages and static schemas
+ * Optionally exclude a specific schema ID (for editing)
+ */
+export const isFieldNameUnique = (
+  name: string,
+  schemasList: SchemaForUI[][],
+  staticSchemas?: SchemaForUI[],
+  excludeId?: string
+): boolean => {
+  // Check static schemas
+  if (staticSchemas) {
+    for (const schema of staticSchemas) {
+      if (schema.name === name && schema.id !== excludeId) {
+        return false;
+      }
+    }
+  }
+
+  // Check all pages
+  for (const page of schemasList) {
+    for (const schema of page) {
+      if (schema.name === name && schema.id !== excludeId) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
+
+/**
+ * Generate a unique field name by appending a number suffix
+ * Searches across all pages and static schemas for conflicts
+ */
+export const generateUniqueFieldName = (
+  baseName: string,
+  schemasList: SchemaForUI[][],
+  staticSchemas?: SchemaForUI[],
+  excludeId?: string
+): string => {
+  if (isFieldNameUnique(baseName, schemasList, staticSchemas, excludeId)) {
+    return baseName;
+  }
+
+  let index = 1;
+  let newName = `${baseName}_${index}`;
+  while (!isFieldNameUnique(newName, schemasList, staticSchemas, excludeId)) {
+    index++;
+    newName = `${baseName}_${index}`;
+  }
+
+  return newName;
+};
+
 const set = <T extends object>(obj: T, path: string | string[], value: unknown) => {
   path = Array.isArray(path) ? path : path.replace(/\[/g, '.').replace(/\]/g, '').split('.');
   let src: Record<string, unknown> = obj as Record<string, unknown>;

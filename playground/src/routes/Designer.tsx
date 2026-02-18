@@ -4,13 +4,13 @@ import { toast } from 'react-toastify';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { cloneDeep, Template, checkTemplate, Lang, isBlankPdf } from "@pdfme/common";
 import { Designer } from "@pdfme/ui";
+import { Globe, FileText, Upload, Download, Pencil, Braces, Copy, Play, RotateCcw } from 'lucide-react';
 import {
   getFontsData,
   getTemplateById,
   getBlankTemplate,
   readFile,
   handleLoadTemplate,
-  generatePDF,
   translations,
 } from "../helper";
 import { getPlugins } from '../plugins';
@@ -255,13 +255,22 @@ function DesignerApp() {
   }, [designerRef, buildDesigner]);
 
   const navItems: NavItem[] = [
+    // Left side - controls with dropdowns
     {
-      label: "Lang",
+      label: "Page Settings",
+      content: (
+        <PageSettings
+          disabled={editingStaticSchemas}
+          designer={designer}
+        />
+      ),
+    },
+    {
+      label: "Language",
       content: (
         <select
           disabled={editingStaticSchemas}
-          className={`w-full border rounded px-2 py-1 ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+          className={`border rounded px-2 py-1 text-sm ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""}`}
           onChange={(e) => {
             designer.current?.updateOptions({ lang: e.target.value as Lang });
           }}
@@ -274,116 +283,71 @@ function DesignerApp() {
         </select>
       ),
     },
+
+    // Right side - icon buttons
     {
-      label: "Page",
-      content: (
-        <PageSettings
-          disabled={editingStaticSchemas}
-          designer={designer}
-        />
-      ),
+      label: "Load Template",
+      tooltip: "Load Template",
+      icon: <Download size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      fileAccept: "application/json",
+      onFileChange: (e) => handleLoadTemplate(e, designer.current),
     },
     {
       label: "Change BasePDF",
-      content: (
-        <input
-          disabled={editingStaticSchemas}
-          type="file"
-          accept="application/pdf"
-          className={`w-full text-sm border rounded ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          onChange={onChangeBasePDF}
-        />
-      ),
+      tooltip: "Change BasePDF",
+      icon: <Upload size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      fileAccept: "application/pdf",
+      onFileChange: onChangeBasePDF,
     },
     {
-      label: "Load Template",
-      content: (
-        <input
-          disabled={editingStaticSchemas}
-          type="file"
-          accept="application/json"
-          className={`w-full text-sm border rounded ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          onChange={(e) => handleLoadTemplate(e, designer.current)}
-        />
-      ),
+      label: "Schema Editor",
+      tooltip: "Schema Editor",
+      icon: <Braces size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      onClick: openSchemaModal,
     },
     {
-      label: "Edit static schema",
-      content: (
-        <button
-          className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
-          onClick={toggleEditingStaticSchemas}
-        >
-          {editingStaticSchemas ? "End editing" : "Start editing"}
-        </button>
-      ),
+      label: editingStaticSchemas ? "End Editing" : "Edit Static Schema",
+      tooltip: editingStaticSchemas ? "End Editing" : "Edit Static Schema",
+      icon: <Pencil size={18} />,
+      isIconOnly: true,
+      onClick: toggleEditingStaticSchemas,
     },
     {
-      label: "",
-      content: (
-        <div className="flex gap-2">
-          <button
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
-            onClick={openSchemaModal}
-          >
-            Schema Editor
-          </button>
-          <button
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
-            onClick={() => {
-              if (!designer.current) return;
-              const template = designer.current.getTemplate();
-              const json = JSON.stringify(template, null, 2);
-              navigator.clipboard.writeText(json).then(() => {
-                toast.success("Template copied to clipboard");
-              });
-            }}
-          >
-            Copy Template
-          </button>
-          <button
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
-            onClick={() => setShowTester(true)}
-          >
-            Test Template
-          </button>
-        </div>
-      ),
+      label: "Copy Template",
+      tooltip: "Copy Template",
+      icon: <Copy size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      onClick: () => {
+        if (!designer.current) return;
+        const template = designer.current.getTemplate();
+        const json = JSON.stringify(template, null, 2);
+        navigator.clipboard.writeText(json).then(() => {
+          toast.success("Template copied to clipboard");
+        });
+      },
     },
     {
-      label: "",
-      content: (
-        <div className="flex gap-2">
-          <button
-            id="reset-template"
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={() => setShowResetConfirm(true)}
-          >
-            Reset
-          </button>
-          <button
-            id="generate-pdf"
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={async () => {
-              const startTimer = performance.now();
-              await generatePDF(designer.current);
-              const endTimer = performance.now();
-              toast.info(`Generated PDF in ${Math.round(endTimer - startTimer)}ms ⚡️`);
-            }}
-          >
-            Generate PDF
-          </button>
-        </div>
-      ),
+      label: "Test Template",
+      tooltip: "Test Template",
+      icon: <Play size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      onClick: () => setShowTester(true),
+    },
+    {
+      label: "Reset",
+      tooltip: "Reset Template",
+      icon: <RotateCcw size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      onClick: () => setShowResetConfirm(true),
     },
   ];
 
