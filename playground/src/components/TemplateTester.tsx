@@ -26,8 +26,8 @@ interface FieldMeta {
 }
 
 
-// Shapes and table types that are always static (no input needed)
-const STATIC_TYPES = new Set(["line", "rectangle", "ellipse", "table", "nestedTable"]);
+// Shapes that are always static (no input needed)
+const STATIC_TYPES = new Set(["line", "rectangle", "ellipse"]);
 
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                    */
@@ -247,6 +247,19 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
             </p>
           )}
         </div>
+      );
+    }
+
+    // Table / NestedTable — JSON array input
+    if (field.type === "table" || field.type === "nestedTable") {
+      return (
+        <textarea
+          className="w-full border rounded px-2 py-1 text-sm font-mono resize-y"
+          rows={4}
+          placeholder={`Enter JSON array, e.g., [{"col1": "value1", "col2": "value2"}]`}
+          value={value}
+          onChange={(e) => updateField(field.name, e.target.value)}
+        />
       );
     }
 
