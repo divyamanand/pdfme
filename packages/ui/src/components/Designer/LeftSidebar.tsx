@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { Schema, Plugin, BasePdf, getFallbackFontName } from '@pdfme/common';
-import { theme, Button } from 'antd';
+import { theme, Button, Dropdown } from 'antd';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import Renderer from '../Renderer.js';
@@ -81,6 +81,16 @@ const LeftSidebar = ({
     };
   }, [isDragging]);
 
+  const entries = Array.from(pluginsRegistry.entries());
+
+  // Separate date/time plugins from others
+  const dateTimePlugins = entries.filter(([label]) =>
+    ['Date', 'Time', 'DateTime'].includes(label)
+  );
+  const otherPlugins = entries.filter(([label]) =>
+    !['Date', 'Time', 'DateTime'].includes(label)
+  );
+
   return (
     <div
       className={DESIGNER_CLASSNAME + 'left-sidebar'}
@@ -96,7 +106,8 @@ const LeftSidebar = ({
         overflow: isDragging ? 'visible' : 'auto',
       }}
     >
-      {pluginsRegistry.entries().map(([label, plugin]) => {
+      {/* Regular plugins */}
+      {otherPlugins.map(([label, plugin]) => {
         if (!plugin?.propPanel.defaultSchema) return null;
 
         const pluginType = plugin.propPanel.defaultSchema.type;
@@ -113,6 +124,40 @@ const LeftSidebar = ({
           </Draggable>
         );
       })}
+
+      {/* Dropdown for Date/Time plugins */}
+      {dateTimePlugins.length > 0 && (
+        <Dropdown
+          menu={{
+            items: dateTimePlugins.map(([label, plugin]) => ({
+              key: label,
+              label: (
+                <Draggable scale={scale} basePdf={basePdf} plugin={plugin!}>
+                  <div
+                    onMouseDown={() => setIsDragging(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' }}
+                  >
+                    <PluginIcon plugin={plugin!} label={label} />
+                    <span>{label}</span>
+                  </div>
+                </Draggable>
+              ),
+            })),
+          }}
+          trigger={['hover']}
+        >
+          <Button
+            className={DESIGNER_CLASSNAME + 'plugin-date-time-dropdown'}
+            onMouseDown={() => setIsDragging(true)}
+            style={{ width: 35, height: 35, marginTop: '0.25rem', padding: '0.25rem' }}
+          >
+            {/* Show the first date plugin icon as default (DateTime) */}
+            {dateTimePlugins.length > 0 && dateTimePlugins[0][1] && (
+              <PluginIcon plugin={dateTimePlugins[0][1]} label={dateTimePlugins[0][0]} />
+            )}
+          </Button>
+        </Dropdown>
+      )}
     </div>
   );
 };

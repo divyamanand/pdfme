@@ -31,6 +31,7 @@ export const getPlugins = () => {
     SVG: svg,
     Signature: signature,
     QR: barcodes.qrcode,
+    // Date/Time plugins now appear in dropdown (see LeftSidebar for dropdown implementation)
     DateTime: dateTime,
     Date: date,
     Time: time,
