@@ -195,7 +195,11 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
   };
 
   const handleCopyJson = async () => {
-    const mergedInputs: Record<string, any> = { ...inputs, ...mvtInputs };
+    const mergedInputs: Record<string, any> = { ...inputs };
+    // Flatten MVT variables: spread all variables directly at top level
+    Object.values(mvtInputs).forEach((vars) => {
+      Object.assign(mergedInputs, vars);
+    });
     // Convert table objects to string[][] format
     Object.entries(tableInputs).forEach(([fieldName, rows]) => {
       const firstRow = rows[0];
@@ -221,7 +225,11 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     try {
       const template = designer.current.getTemplate();
       const font = getFontsData();
-      const mergedInputs: Record<string, any> = { ...inputs, ...mvtInputs };
+      const mergedInputs: Record<string, any> = { ...inputs };
+      // Flatten MVT variables: spread all variables directly at top level
+      Object.values(mvtInputs).forEach((vars) => {
+        Object.assign(mergedInputs, vars);
+      });
       // Convert table objects to string[][] for the generator
       Object.entries(tableInputs).forEach(([fieldName, rows]) => {
         const firstRow = rows[0];
