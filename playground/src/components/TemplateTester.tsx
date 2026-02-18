@@ -35,6 +35,7 @@ const STATIC_TYPES = new Set(["line", "rectangle", "ellipse"]);
 export function TemplateTester({ open, onClose, designer }: TemplateTesterProps) {
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [mvtInputs, setMvtInputs] = useState<Record<string, Record<string, string>>>({});
+  const [tableInputs, setTableInputs] = useState<Record<string, Array<Record<string, string>>>>({});
   const [fieldMeta, setFieldMeta] = useState<FieldMeta[]>([]);
   const [generating, setGenerating] = useState(false);
 
@@ -55,6 +56,7 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     const meta: FieldMeta[] = [];
     const seen = new Set<string>();
     const mvt: Record<string, Record<string, string>> = {};
+    const tbl: Record<string, Array<Record<string, string>>> = {};
 
     // Helper function to process schemas
     const processSchema = (schema: Schema) => {
@@ -71,6 +73,20 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
             variables.forEach((v: string) => { varValues[v] = ''; });
             mvt[schema.name] = varValues;
             console.log(`Added MVT field: ${schema.name} with variables:`, variables);
+            // Don't add to regular meta — will render separately
+            return;
+          }
+        }
+
+        // Check if this is a table or nestedTable field with columns
+        if (schema.type === 'table' || schema.type === 'nestedTable') {
+          const head = (schema as any).head;
+          if (Array.isArray(head) && head.length > 0) {
+            // Initialize with 1 empty row for each column
+            const rowData: Record<string, string> = {};
+            head.forEach((col: string) => { rowData[col] = ''; });
+            tbl[schema.name] = [rowData];
+            console.log(`Added table field: ${schema.name} with columns:`, head);
             // Don't add to regular meta — will render separately
             return;
           }
@@ -100,10 +116,12 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
 
     console.log("Final extracted fields:", meta.map(m => ({ name: m.name, type: m.type })));
     console.log("Final extracted MVT fields:", Object.keys(mvt));
-    console.log("Total unique fields (regular + MVT):", seen.size);
+    console.log("Final extracted table fields:", Object.keys(tbl));
+    console.log("Total unique fields (regular + MVT + tables):", seen.size);
 
     setFieldMeta(meta);
     setMvtInputs(mvt);
+    setTableInputs(tbl);
     setInputs(defaultInputs);
   }, [open, designer]);
 
@@ -118,8 +136,45 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
     }));
   };
 
+  const updateTableField = (fieldName: string, rowIndex: number, colName: string, value: string) => {
+    setTableInputs((prev) => ({
+      ...prev,
+      [fieldName]: prev[fieldName].map((row, idx) =>
+        idx === rowIndex ? { ...row, [colName]: value } : row
+      ),
+    }));
+  };
+
+  const addTableRow = (fieldName: string, columnHeaders: string[]) => {
+    setTableInputs((prev) => {
+      const newRow: Record<string, string> = {};
+      columnHeaders.forEach((col) => { newRow[col] = ''; });
+      return {
+        ...prev,
+        [fieldName]: [...prev[fieldName], newRow],
+      };
+    });
+  };
+
+  const removeTableRow = (fieldName: string, rowIndex: number) => {
+    setTableInputs((prev) => ({
+      ...prev,
+      [fieldName]: prev[fieldName].filter((_, idx) => idx !== rowIndex),
+    }));
+  };
+
   const handleCopyJson = async () => {
     const mergedInputs = { ...inputs, ...mvtInputs };
+    // Convert table objects to string[][] format
+    Object.entries(tableInputs).forEach(([fieldName, rows]) => {
+      const firstRow = rows[0];
+      if (firstRow) {
+        const columns = Object.keys(firstRow);
+        mergedInputs[fieldName] = JSON.stringify(
+          rows.map((row) => columns.map((col) => row[col] || ''))
+        );
+      }
+    });
     const json = JSON.stringify([mergedInputs], null, 2);
     try {
       await navigator.clipboard.writeText(json);
@@ -138,6 +193,16 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
       const mergedInputs = { ...inputs, ...mvtInputs };
       // mvtInputs values are objects like { name: "Divyam", time: "12:00" }
       // generator serializes them to JSON automatically
+
+      // Convert table objects to string[][] format
+      Object.entries(tableInputs).forEach(([fieldName, rows]) => {
+        const firstRow = rows[0];
+        if (firstRow) {
+          const columns = Object.keys(firstRow);
+          mergedInputs[fieldName] = rows.map((row) => columns.map((col) => row[col] || ''));
+        }
+      });
+
       const pdf = await generate({
         template,
         inputs: [mergedInputs],
@@ -300,7 +365,7 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
             {/* Input Fields Section */}
-            {fieldMeta.length === 0 && Object.keys(mvtInputs).length === 0 ? (
+            {fieldMeta.length === 0 && Object.keys(mvtInputs).length === 0 && Object.keys(tableInputs).length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-8">
                 No variable fields in this template.
               </p>
@@ -355,6 +420,64 @@ export function TemplateTester({ open, onClose, designer }: TemplateTesterProps)
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Table fields — per-row, per-column inputs */}
+                {Object.keys(tableInputs).length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Table Fields
+                    </h3>
+                    {Object.entries(tableInputs).map(([fieldName, rows]) => {
+                      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+                      return (
+                        <div key={fieldName} className="border rounded-lg p-3">
+                          <label className="flex items-center gap-2 mb-2">
+                            <span className="text-sm font-medium">{fieldName}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">
+                              table
+                            </span>
+                          </label>
+                          <div className="space-y-2 bg-gray-50 p-2 rounded border border-blue-200">
+                            {rows.map((row, rowIdx) => (
+                              <div key={rowIdx} className="flex gap-1 items-start bg-white p-2 rounded border border-gray-200">
+                                <div className="flex-1 grid gap-1" style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
+                                  {columns.map((colName) => (
+                                    <div key={`${rowIdx}-${colName}`} className="flex flex-col gap-0.5">
+                                      <label className="text-xs font-medium text-gray-600">{colName}</label>
+                                      <input
+                                        type="text"
+                                        className="border rounded px-2 py-1 text-xs"
+                                        placeholder={colName}
+                                        value={row[colName] || ''}
+                                        onChange={(e) => updateTableField(fieldName, rowIdx, colName, e.target.value)}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                                {rows.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="mt-5 px-2 py-1 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50"
+                                    onClick={() => removeTableRow(fieldName, rowIdx)}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="w-full px-2 py-1.5 text-xs border border-blue-300 text-blue-600 rounded hover:bg-blue-50 font-medium"
+                              onClick={() => addTableRow(fieldName, columns)}
+                            >
+                              + Add Row
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>
