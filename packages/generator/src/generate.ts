@@ -7,6 +7,7 @@ import {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  buildTableCellContext,
   pt2mm,
   cloneDeep,
 } from '@pdfme/common';
@@ -87,6 +88,9 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
 
       const page = insertPage({ basePage, embedPdfBox, pdfDoc });
 
+      // Build table cell context so other plugins can reference table cells as fieldName.A1
+      const tableCellContext = buildTableCellContext(schemas as any, input);
+
       if (isBlankPdf(basePdf) && basePdf.staticSchema) {
         for (let k = 0; k < basePdf.staticSchema.length; k += 1) {
           const staticSchema = basePdf.staticSchema[k];
@@ -96,7 +100,7 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           }
           const rawInput = input[staticSchema.name];
           let value: string;
-          const varsContext = { ...input, totalPages: basePages.length, currentPage: j + 1 };
+          const varsContext = { ...input, ...tableCellContext, totalPages: basePages.length, currentPage: j + 1 };
           if (staticSchema.readOnly) {
             value = replacePlaceholders({
               content: staticSchema.content || '',
@@ -170,7 +174,7 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         }
         const rawInput = input[name];
         let value: string;
-        const varsContext = { ...input, totalPages: basePages.length, currentPage: j + 1 };
+        const varsContext = { ...input, ...tableCellContext, totalPages: basePages.length, currentPage: j + 1 };
         if (schema.readOnly) {
           value = replacePlaceholders({
             content: schema.content || '',

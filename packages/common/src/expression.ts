@@ -6,6 +6,7 @@ import {
   buildCellAddressMap,
   parseTokens,
   replaceTokenAtIndex,
+  resolveRulesForCell,
 } from './conditionalFormatting.js';
 
 const expressionCache = new Map<string, (context: Record<string, unknown>) => unknown>();
@@ -428,6 +429,45 @@ const evaluatePlaceholders = (arg: {
   return resultContent;
 };
 
+/**
+ * Build a map of table cell values keyed by schema name.
+ * Enables cross-plugin access: {{myTable.A1}}, {{invoiceTable.B3}}, etc.
+ *
+ * For each table/nestedTable schema, parses its value (from input or content)
+ * and creates: { schemaName: { A1: "val", B2: "val", ... } }
+ */
+export const buildTableCellContext = (
+  schemas: SchemaPageArray,
+  input: Record<string, unknown>,
+): Record<string, Record<string, string>> => {
+  const result: Record<string, Record<string, string>> = {};
+
+  for (const page of schemas) {
+    for (const schema of page) {
+      if (schema.type !== 'table' && schema.type !== 'nestedTable') continue;
+      const rawInput = input[schema.name];
+      let tableValue: string;
+      if (typeof rawInput === 'string') {
+        tableValue = rawInput;
+      } else if (typeof rawInput === 'object' && rawInput !== null) {
+        tableValue = JSON.stringify(rawInput);
+      } else {
+        tableValue = (schema as any).content || '';
+      }
+      try {
+        const rows = JSON.parse(tableValue) as string[][];
+        if (Array.isArray(rows)) {
+          result[schema.name] = buildCellAddressMap(rows);
+        }
+      } catch {
+        // Not valid JSON, skip
+      }
+    }
+  }
+
+  return result;
+};
+
 // Helper to build evaluation context shared by both replacePlaceholders and evaluateExpressions
 const buildEvalContext = (
   variables: Record<string, unknown>,
@@ -596,8 +636,11 @@ export const evaluateTableCellExpressions = (arg: {
 }): string => {
   const { value, variables, schemas, conditionalFormatting } = arg;
 
-  // Fast exit: no double-brace markers
-  if (!value || typeof value !== 'string' || !value.includes('{{')) {
+  // Fast exit: no expressions and no conditional formatting
+  if (!value || typeof value !== 'string') {
+    return value;
+  }
+  if (!value.includes('{{') && !conditionalFormatting) {
     return value;
   }
 
@@ -614,11 +657,13 @@ export const evaluateTableCellExpressions = (arg: {
           return cell;
         }
 
-        const cellKey = `${rowIndex}:${colIndex}` as any;
-        const tokenRules = conditionalFormatting?.[cellKey as any];
+        // Resolve rules: checks cell-specific, column-wildcard (*:col), row-wildcard (row:*) keys
+        const tokenRules = conditionalFormatting
+          ? resolveRulesForCell(conditionalFormatting, rowIndex, colIndex)
+          : [];
 
         // If no conditional formatting rules for this cell, use old path (backward compatible)
-        if (!tokenRules || tokenRules.length === 0) {
+        if (tokenRules.length === 0) {
           return evaluateExpressions({
             content: cell,
             variables: augmentedVariables,

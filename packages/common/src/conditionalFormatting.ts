@@ -18,10 +18,14 @@ export interface VisualConditionBranch {
   /** Left-hand operand: field name, cell ref (A1), or special (currentDate, currentPage, etc.) */
   field: string;
   operator: ConditionOperator;
-  /** Right-hand literal (unused for isEmpty/isNotEmpty) */
+  /** Right-hand operand (unused for isEmpty/isNotEmpty) */
   value: string;
+  /** If true, value is a variable reference (emitted unquoted); otherwise treated as a literal */
+  valueIsVariable?: boolean;
   /** String value to emit when this branch condition is true */
   result: string;
+  /** If true, result is a variable reference (emitted unquoted); otherwise treated as a quoted string */
+  resultIsVariable?: boolean;
 }
 
 /**
@@ -30,6 +34,8 @@ export interface VisualConditionBranch {
 export interface VisualRule {
   branches: VisualConditionBranch[];
   defaultResult: string;
+  /** If true, defaultResult is a variable reference (emitted unquoted) */
+  defaultResultIsVariable?: boolean;
 }
 
 /**
@@ -45,18 +51,26 @@ export interface CellTokenRule {
   visualRule?: VisualRule;
   /** The JS expression evaluated at runtime. Derived from visualRule (if visual) or typed directly (if code). */
   compiledExpression: string;
+  /** For wildcard rules: the row the rule was authored on (used to shift cell refs at eval time) */
+  sourceRow?: number;
+  /** For wildcard rules: the col the rule was authored on (used to shift cell refs at eval time) */
+  sourceCol?: number;
 }
 
 /**
- * Storage key format: "rowIndex:colIndex" (both 0-based body indices).
- * Example: "2:3" means row index 2, column index 3.
+ * Storage key format:
+ * - "rowIndex:colIndex" — cell-specific rule (both 0-based body indices)
+ * - "*:colIndex" — column-wide rule (applies to ALL rows in that column, including future dynamic rows)
+ * - "rowIndex:*" — row-wide rule (applies to ALL columns in that row)
+ *
+ * Cell-specific keys take precedence over wildcards at evaluation time.
  */
-export type CellKey = `${number}:${number}`;
+export type CellKey = string;
 
 /**
  * All conditional formatting rules for a table/nestedTable.
- * Maps cell address to array of token rules.
- * Sparse: only cells with rules have entries.
+ * Maps cell address (or wildcard pattern) to array of token rules.
+ * Sparse: only cells/columns/rows with rules have entries.
  */
 export type TableConditionalFormatting = Record<CellKey, CellTokenRule[]>;
 
@@ -237,12 +251,16 @@ export function compileVisualRulesToExpression(rule: VisualRule): string {
 
   // Build nested ternary chain from last branch inward:
   // cond1 ? val1 : (cond2 ? val2 : (… : defaultVal))
-  let result = JSON.stringify(rule.defaultResult);
+  let result = rule.defaultResultIsVariable
+    ? rule.defaultResult
+    : JSON.stringify(rule.defaultResult);
 
   for (let i = rule.branches.length - 1; i >= 0; i--) {
     const branch = rule.branches[i];
     const condition = compileCondition(branch);
-    const consequent = JSON.stringify(branch.result);
+    const consequent = branch.resultIsVariable
+      ? branch.result
+      : JSON.stringify(branch.result);
     // Wrap the alternate in parens if it contains a ternary (i.e. not the innermost level)
     const needsParens = i < rule.branches.length - 1;
     if (needsParens) {
@@ -261,8 +279,9 @@ export function compileVisualRulesToExpression(rule: VisualRule): string {
 function compileCondition(branch: VisualConditionBranch): string {
   const field = branch.field;
 
-  // For comparison operators, emit raw value if numeric, quoted otherwise
-  const compileValue = (val: string): string => {
+  // Emit value: raw if variable, raw if numeric, quoted otherwise
+  const compileValue = (val: string, isVar?: boolean): string => {
+    if (isVar) return val; // variable reference, emit raw
     const num = Number(val);
     if (val !== '' && !isNaN(num) && isFinite(num)) {
       return val; // emit raw number
@@ -270,25 +289,27 @@ function compileCondition(branch: VisualConditionBranch): string {
     return JSON.stringify(val); // emit quoted string
   };
 
+  const cv = (val: string) => compileValue(val, branch.valueIsVariable);
+
   switch (branch.operator) {
     case '==':
-      return `${field} == ${compileValue(branch.value)}`;
+      return `${field} == ${cv(branch.value)}`;
     case '!=':
-      return `${field} != ${compileValue(branch.value)}`;
+      return `${field} != ${cv(branch.value)}`;
     case '<':
-      return `${field} < ${compileValue(branch.value)}`;
+      return `${field} < ${cv(branch.value)}`;
     case '<=':
-      return `${field} <= ${compileValue(branch.value)}`;
+      return `${field} <= ${cv(branch.value)}`;
     case '>':
-      return `${field} > ${compileValue(branch.value)}`;
+      return `${field} > ${cv(branch.value)}`;
     case '>=':
-      return `${field} >= ${compileValue(branch.value)}`;
+      return `${field} >= ${cv(branch.value)}`;
     case 'contains':
-      return `String(${field}).includes(${JSON.stringify(branch.value)})`;
+      return `String(${field}).includes(${branch.valueIsVariable ? branch.value : JSON.stringify(branch.value)})`;
     case 'startsWith':
-      return `String(${field}).startsWith(${JSON.stringify(branch.value)})`;
+      return `String(${field}).startsWith(${branch.valueIsVariable ? branch.value : JSON.stringify(branch.value)})`;
     case 'endsWith':
-      return `String(${field}).endsWith(${JSON.stringify(branch.value)})`;
+      return `String(${field}).endsWith(${branch.valueIsVariable ? branch.value : JSON.stringify(branch.value)})`;
     case 'isEmpty':
       return `!${field}`;
     case 'isNotEmpty':
@@ -349,13 +370,14 @@ export function tryParseExpressionToVisualRule(expression: string): VisualRule |
     const consequentStr = expression.substring(questionIndex + 1, colonIndex).trim();
     const alternateStr = expression.substring(colonIndex + 1).trim();
 
-    // Check if consequent and alternate are string literals
-    if (
-      !isStringLiteral(consequentStr) ||
-      !isStringLiteral(alternateStr)
-    ) {
-      return null;
-    }
+    // Check if consequent and alternate are string literals or bare identifiers
+    const consequentIsLiteral = isStringLiteral(consequentStr);
+    const alternateIsLiteral = isStringLiteral(alternateStr);
+    const consequentIsIdent = !consequentIsLiteral && isIdentifier(consequentStr);
+    const alternateIsIdent = !alternateIsLiteral && isIdentifier(alternateStr);
+
+    if (!consequentIsLiteral && !consequentIsIdent) return null;
+    if (!alternateIsLiteral && !alternateIsIdent) return null;
 
     // Try to parse the test condition into a simple comparison
     const branch = parseSimpleCondition(testStr);
@@ -363,12 +385,14 @@ export function tryParseExpressionToVisualRule(expression: string): VisualRule |
       return null;
     }
 
-    // Set the result from the consequent string
-    branch.result = parseStringLiteral(consequentStr);
+    // Set the result from the consequent
+    branch.result = consequentIsLiteral ? parseStringLiteral(consequentStr) : consequentStr;
+    branch.resultIsVariable = consequentIsIdent || undefined;
 
     return {
       branches: [branch],
-      defaultResult: parseStringLiteral(alternateStr),
+      defaultResult: alternateIsLiteral ? parseStringLiteral(alternateStr) : alternateStr,
+      defaultResultIsVariable: alternateIsIdent || undefined,
     };
   } catch {
     return null;
@@ -381,6 +405,11 @@ function isStringLiteral(str: string): boolean {
     (str.startsWith('"') && str.endsWith('"')) ||
     (str.startsWith("'") && str.endsWith("'"))
   );
+}
+
+/** Check if a string is a valid JS identifier or cell reference (bare variable) */
+function isIdentifier(str: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(str);
 }
 
 /** Parse a JSON string literal and return the string value */
@@ -415,16 +444,21 @@ function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
     if (match) {
       const field = match[1].trim();
       let value = match[2].trim();
+      let valueIsVariable: boolean | undefined;
 
-      // Parse the value if it's a string literal
+      // Parse the value: string literal → unquote, identifier → variable, number → as-is
       if (isStringLiteral(value)) {
         value = parseStringLiteral(value);
+      } else if (isIdentifier(value)) {
+        valueIsVariable = true;
       }
+      // else: numeric or expression — kept as-is
 
       return {
         field,
         operator: op as ConditionOperator,
         value,
+        valueIsVariable,
         result: '', // Placeholder, will be set by caller
       };
     }
@@ -452,6 +486,81 @@ function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
   }
 
   return null;
+}
+
+// ============================================================================
+// CELL REFERENCE SHIFTING (for wildcard rules & copy operations)
+// ============================================================================
+
+/**
+ * Shift Excel-style cell references (A1, B2, AA3, etc.) in an expression string.
+ * Used when applying a wildcard column/row rule to a specific cell, or when copying rules.
+ *
+ * Example: shiftCellRefsInExpression("B1 > A1", 2, 0) → "B3 > A3"
+ */
+export function shiftCellRefsInExpression(
+  expr: string,
+  rowDelta: number,
+  colDelta: number,
+): string {
+  return expr.replace(
+    /\b([A-Z]+)(\d+)\b/g,
+    (_match: string, colLetters: string, rowStr: string) => {
+      const newRow = parseInt(rowStr, 10) + rowDelta;
+      const colIdx = colLetterToIndex(colLetters);
+      const newCol = colIdx + colDelta;
+      if (newRow < 1 || newCol < 0) return _match;
+      return `${colIndexToLetter(newCol)}${newRow}`;
+    },
+  );
+}
+
+/**
+ * Resolve rules for a specific cell, checking cell-specific, column-wildcard, and row-wildcard keys.
+ * Cell-specific rules take precedence over wildcards.
+ * Wildcard rules have their cell refs shifted based on sourceRow/sourceCol.
+ */
+export function resolveRulesForCell(
+  cf: TableConditionalFormatting,
+  rowIndex: number,
+  colIndex: number,
+): CellTokenRule[] {
+  // 1. Cell-specific rules (highest priority)
+  const cellKey = `${rowIndex}:${colIndex}`;
+  const cellRules = cf[cellKey];
+  if (cellRules && cellRules.length > 0) {
+    return cellRules;
+  }
+
+  // 2. Column-wide wildcard
+  const colWildcard = `*:${colIndex}`;
+  const colRules = cf[colWildcard];
+  if (colRules && colRules.length > 0) {
+    return colRules.map((rule) => {
+      const rowDelta = rowIndex - (rule.sourceRow ?? 0);
+      if (rowDelta === 0) return rule;
+      return {
+        ...rule,
+        compiledExpression: shiftCellRefsInExpression(rule.compiledExpression, rowDelta, 0),
+      };
+    });
+  }
+
+  // 3. Row-wide wildcard
+  const rowWildcard = `${rowIndex}:*`;
+  const rowRules = cf[rowWildcard];
+  if (rowRules && rowRules.length > 0) {
+    return rowRules.map((rule) => {
+      const colDelta = colIndex - (rule.sourceCol ?? 0);
+      if (colDelta === 0) return rule;
+      return {
+        ...rule,
+        compiledExpression: shiftCellRefsInExpression(rule.compiledExpression, 0, colDelta),
+      };
+    });
+  }
+
+  return [];
 }
 
 // ============================================================================
@@ -500,25 +609,40 @@ export function shiftCFRows(
 
   for (const [key, rules] of Object.entries(cf)) {
     const [rowStr, colStr] = key.split(':');
-    const rowIndex = parseInt(rowStr, 10);
-    const colIndex = parseInt(colStr, 10);
 
-    if (delta === -1 && rowIndex === afterRow) {
-      // Row is being deleted — discard its rules
+    // Wildcard keys: *:col is unaffected by row shifts, row:* needs shifting
+    if (rowStr === '*') {
+      updated[key] = rules; // column-wide wildcard, row-independent
       continue;
     }
 
+    const rowIndex = parseInt(rowStr, 10);
+
+    if (colStr === '*') {
+      // Row-wide wildcard — shift the row part
+      if (delta === -1 && rowIndex === afterRow) continue;
+      if (delta === -1 && rowIndex > afterRow) {
+        updated[`${rowIndex - 1}:*`] = rules;
+      } else if (delta === 1 && rowIndex >= afterRow) {
+        updated[`${rowIndex + 1}:*`] = rules;
+      } else {
+        updated[key] = rules;
+      }
+      continue;
+    }
+
+    const colIndex = parseInt(colStr, 10);
+
+    if (delta === -1 && rowIndex === afterRow) {
+      continue; // Row is being deleted
+    }
+
     if (delta === -1 && rowIndex > afterRow) {
-      // Shift rows after the deleted row down by 1
-      const newKey = `${rowIndex - 1}:${colIndex}` as CellKey;
-      updated[newKey as any] = rules;
+      updated[`${rowIndex - 1}:${colIndex}`] = rules;
     } else if (delta === 1 && rowIndex >= afterRow) {
-      // Shift rows at/after the insertion point up by 1
-      const newKey = `${rowIndex + 1}:${colIndex}` as CellKey;
-      updated[newKey as any] = rules;
+      updated[`${rowIndex + 1}:${colIndex}`] = rules;
     } else {
-      // Row index is before the shift point, keep as-is
-      updated[key as any] = rules;
+      updated[key] = rules;
     }
   }
 
@@ -541,25 +665,40 @@ export function shiftCFCols(
 
   for (const [key, rules] of Object.entries(cf)) {
     const [rowStr, colStr] = key.split(':');
-    const rowIndex = parseInt(rowStr, 10);
-    const colIndex = parseInt(colStr, 10);
 
-    if (delta === -1 && colIndex === afterCol) {
-      // Column is being deleted — discard its rules
+    // Wildcard keys: row:* is unaffected by col shifts, *:col needs shifting
+    if (colStr === '*') {
+      updated[key] = rules; // row-wide wildcard, col-independent
       continue;
     }
 
+    const colIndex = parseInt(colStr, 10);
+
+    if (rowStr === '*') {
+      // Column-wide wildcard — shift the col part
+      if (delta === -1 && colIndex === afterCol) continue;
+      if (delta === -1 && colIndex > afterCol) {
+        updated[`*:${colIndex - 1}`] = rules;
+      } else if (delta === 1 && colIndex >= afterCol) {
+        updated[`*:${colIndex + 1}`] = rules;
+      } else {
+        updated[key] = rules;
+      }
+      continue;
+    }
+
+    const rowIndex = parseInt(rowStr, 10);
+
+    if (delta === -1 && colIndex === afterCol) {
+      continue; // Column is being deleted
+    }
+
     if (delta === -1 && colIndex > afterCol) {
-      // Shift columns after the deleted column left by 1
-      const newKey = `${rowIndex}:${colIndex - 1}` as CellKey;
-      updated[newKey as any] = rules;
+      updated[`${rowIndex}:${colIndex - 1}`] = rules;
     } else if (delta === 1 && colIndex >= afterCol) {
-      // Shift columns at/after the insertion point right by 1
-      const newKey = `${rowIndex}:${colIndex + 1}` as CellKey;
-      updated[newKey as any] = rules;
+      updated[`${rowIndex}:${colIndex + 1}`] = rules;
     } else {
-      // Column index is before the shift point, keep as-is
-      updated[key as any] = rules;
+      updated[key] = rules;
     }
   }
 

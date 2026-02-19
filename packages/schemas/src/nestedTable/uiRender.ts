@@ -1,7 +1,7 @@
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import type { NestedTableSchema } from './types.js';
 import type { Styles } from '../tables/types.js';
-import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter } from '@pdfme/common';
+import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter, shiftCellRefsInExpression } from '@pdfme/common';
 import { createSingleTable } from '../tables/tableHelper.js';
 import { getBody, getBodyWithRange } from '../tables/helper.js';
 import cell from '../tables/cell.js';
@@ -163,6 +163,7 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
     void uiRender(arg);
   };
 
+  const startRange = schema.__bodyRange?.start ?? 0;
   const handleChangeBodyEditingPosition = (newPosition: {
     rowIndex: number;
     colIndex: number;
@@ -171,6 +172,12 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
     bodyEditingPosition.rowIndex = newPosition.rowIndex;
     bodyEditingPosition.colIndex = newPosition.colIndex;
     void uiRender(arg);
+    // Notify the CF widget which body cell is active
+    if (mode === 'designer') {
+      document.dispatchEvent(new CustomEvent('pdfme-table-cell-select', {
+        detail: { schemaId: schema.id, row: newPosition.rowIndex + startRange, col: newPosition.colIndex },
+      }));
+    }
   };
 
   // ---- Render nested header rows ----
@@ -355,7 +362,26 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
       text: '+',
       onClick: () => {
         const newRow = Array(leaves.length).fill('') as string[];
-        if (onChange) onChange({ key: 'content', value: JSON.stringify(body.concat([newRow])) });
+        const newRowIndex = body.length;
+        const changes: Array<{ key: string; value: any }> = [];
+
+        // Apply column-wide wildcard CF rules to the new row for visibility
+        if (schema.conditionalFormatting) {
+          for (let c = 0; c < leaves.length; c++) {
+            const wcRules = schema.conditionalFormatting[`*:${c}`];
+            if (wcRules && wcRules.length > 0) {
+              const rule = wcRules[0];
+              const rowDelta = newRowIndex - (rule.sourceRow ?? 0);
+              const expr = rowDelta === 0
+                ? rule.compiledExpression
+                : shiftCellRefsInExpression(rule.compiledExpression, rowDelta, 0);
+              newRow[c] = `{{${expr}}}`;
+            }
+          }
+        }
+
+        changes.push({ key: 'content', value: JSON.stringify(body.concat([newRow])) });
+        if (onChange) onChange(changes);
       },
     });
 
@@ -538,46 +564,6 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
       rowLabelY += row.height;
     });
 
-    // CF expression preview overlays on body cells
-    if (schema.conditionalFormatting) {
-      let cfRowY = headerHeight;
-      table.body.forEach((row, rowIndex) => {
-        let cfColX = 0;
-        Object.values(row.cells).forEach((bodyCell, colIndex) => {
-          const cfKey = `${rowIndex + startRange}:${colIndex}`;
-          const rules = (schema.conditionalFormatting as any)?.[cfKey];
-          if (rules && Array.isArray(rules) && rules.length > 0) {
-            const overlay = document.createElement('div');
-            Object.assign(overlay.style, {
-              position: 'absolute',
-              top: `${cfRowY + bodyCell.height - px2mm(14)}mm`,
-              left: `${cfColX}mm`,
-              width: `${bodyCell.width}mm`,
-              background: 'rgba(37,194,160,0.12)',
-              borderTop: '1px dashed rgba(37,194,160,0.5)',
-              padding: '0 3px',
-              fontSize: '9px',
-              fontFamily: 'monospace',
-              color: '#1a9979',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              lineHeight: `${px2mm(14)}mm`,
-              pointerEvents: 'none',
-              zIndex: '5',
-              boxSizing: 'border-box',
-            });
-            overlay.textContent = rules.map((r: any) => r.compiledExpression).join(' | ');
-            overlay.title = rules
-              .map((r: any) => `Token ${r.tokenIndex}: ${r.compiledExpression}`)
-              .join('\n');
-            rootElement.appendChild(overlay);
-          }
-          cfColX += bodyCell.width;
-        });
-        cfRowY += row.height;
-      });
-    }
   }
 
   if (mode === 'viewer') {

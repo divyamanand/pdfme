@@ -8,6 +8,7 @@ import {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  buildTableCellContext,
 } from '@pdfme/common';
 import { getDynamicHeightsForTable } from '@pdfme/schemas/utils';
 import UnitPager from './UnitPager.js';
@@ -186,7 +187,8 @@ const Preview = ({
           backgrounds={backgrounds}
           renderSchema={({ schema, index }) => {
             let value: string;
-            const varsContext = { ...input, totalPages: schemasList.length, currentPage: index + 1 };
+            const tableCellCtx = buildTableCellContext(schemasList as any, input || {});
+            const varsContext = { ...input, ...tableCellCtx, totalPages: schemasList.length, currentPage: index + 1 };
             if (schema.readOnly) {
               value = replacePlaceholders({
                 content: schema.content || '',
