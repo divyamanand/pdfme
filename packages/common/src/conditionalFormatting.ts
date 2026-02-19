@@ -1,8 +1,9 @@
 /**
- * Conditional formatting system for table/nestedTable plugins.
+ * Conditional formatting system for all plugins.
  *
- * Allows per-cell, per-token conditional rules that evaluate to values.
- * Stores rules separately from cell content, enabling visual rule editor + code editor modes.
+ * For tables/nestedTables: per-cell conditional rules that replace entire cell values.
+ * For other plugins: a single rule that replaces the entire schema value.
+ * Stores rules separately from content, enabling visual rule editor + code editor modes.
  */
 
 export type ConditionOperator =
@@ -39,23 +40,25 @@ export interface VisualRule {
 }
 
 /**
- * Rule for one {{...}} token in one cell.
+ * A single conditional rule for a cell or schema.
+ * When present, replaces the entire value (no per-token logic).
  * Stores both visual rule (for UI authoring) and compiled expression (for runtime evaluation).
  */
-export interface CellTokenRule {
-  /** 0-based index of the {{...}} token in the cell text, left-to-right order */
-  tokenIndex: number;
+export interface ConditionalRule {
   /** Which editor mode the rule was created in */
   mode: 'visual' | 'code';
   /** Source of truth when mode='visual'; undefined when mode='code' */
   visualRule?: VisualRule;
-  /** The JS expression evaluated at runtime. Derived from visualRule (if visual) or typed directly (if code). */
+  /** The JS expression evaluated at runtime. The result IS the entire value. */
   compiledExpression: string;
   /** For wildcard rules: the row the rule was authored on (used to shift cell refs at eval time) */
   sourceRow?: number;
   /** For wildcard rules: the col the rule was authored on (used to shift cell refs at eval time) */
   sourceCol?: number;
 }
+
+/** @deprecated Use ConditionalRule instead */
+export type CellTokenRule = ConditionalRule;
 
 /**
  * Storage key format:
@@ -69,10 +72,10 @@ export type CellKey = string;
 
 /**
  * All conditional formatting rules for a table/nestedTable.
- * Maps cell address (or wildcard pattern) to array of token rules.
+ * Maps cell address (or wildcard pattern) to a single rule per cell.
  * Sparse: only cells/columns/rows with rules have entries.
  */
-export type TableConditionalFormatting = Record<CellKey, CellTokenRule[]>;
+export type TableConditionalFormatting = Record<CellKey, ConditionalRule>;
 
 // ============================================================================
 // COLUMN ADDRESS UTILITIES
@@ -493,17 +496,17 @@ function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
 // ============================================================================
 
 /**
- * Clone a CellTokenRule and shift all cell references in compiledExpression + visual branches.
+ * Clone a ConditionalRule and shift all cell references in compiledExpression + visual branches.
  * Used when copying a rule to a different row/column, or when applying wildcard rules.
  *
  * Example: shiftRule(rule, 2, 0) → new rule with all cell refs shifted down 2 rows
  */
 export function shiftRule(
-  rule: CellTokenRule,
+  rule: ConditionalRule,
   rowDelta: number,
   colDelta: number,
-): CellTokenRule {
-  const shifted: CellTokenRule = {
+): ConditionalRule {
+  const shifted: ConditionalRule = {
     ...rule,
     compiledExpression: shiftCellRefsInExpression(rule.compiledExpression, rowDelta, colDelta),
   };
@@ -547,51 +550,48 @@ export function shiftCellRefsInExpression(
 }
 
 /**
- * Resolve rules for a specific cell, checking cell-specific, column-wildcard, and row-wildcard keys.
- * Cell-specific rules take precedence over wildcards.
+ * Resolve the conditional rule for a specific cell.
+ * Checks cell-specific, column-wildcard, and row-wildcard keys (in priority order).
  * Wildcard rules have their cell refs shifted based on sourceRow/sourceCol.
+ * Returns undefined if no rule applies.
  */
 export function resolveRulesForCell(
   cf: TableConditionalFormatting,
   rowIndex: number,
   colIndex: number,
-): CellTokenRule[] {
-  // 1. Cell-specific rules (highest priority)
+): ConditionalRule | undefined {
+  // 1. Cell-specific rule (highest priority)
   const cellKey = `${rowIndex}:${colIndex}`;
-  const cellRules = cf[cellKey];
-  if (cellRules && cellRules.length > 0) {
-    return cellRules;
+  const cellRule = cf[cellKey];
+  if (cellRule) {
+    return cellRule;
   }
 
   // 2. Column-wide wildcard
   const colWildcard = `*:${colIndex}`;
-  const colRules = cf[colWildcard];
-  if (colRules && colRules.length > 0) {
-    return colRules.map((rule) => {
-      const rowDelta = rowIndex - (rule.sourceRow ?? 0);
-      if (rowDelta === 0) return rule;
-      return {
-        ...rule,
-        compiledExpression: shiftCellRefsInExpression(rule.compiledExpression, rowDelta, 0),
-      };
-    });
+  const colRule = cf[colWildcard];
+  if (colRule) {
+    const rowDelta = rowIndex - (colRule.sourceRow ?? 0);
+    if (rowDelta === 0) return colRule;
+    return {
+      ...colRule,
+      compiledExpression: shiftCellRefsInExpression(colRule.compiledExpression, rowDelta, 0),
+    };
   }
 
   // 3. Row-wide wildcard
   const rowWildcard = `${rowIndex}:*`;
-  const rowRules = cf[rowWildcard];
-  if (rowRules && rowRules.length > 0) {
-    return rowRules.map((rule) => {
-      const colDelta = colIndex - (rule.sourceCol ?? 0);
-      if (colDelta === 0) return rule;
-      return {
-        ...rule,
-        compiledExpression: shiftCellRefsInExpression(rule.compiledExpression, 0, colDelta),
-      };
-    });
+  const rowRule = cf[rowWildcard];
+  if (rowRule) {
+    const colDelta = colIndex - (rowRule.sourceCol ?? 0);
+    if (colDelta === 0) return rowRule;
+    return {
+      ...rowRule,
+      compiledExpression: shiftCellRefsInExpression(rowRule.compiledExpression, 0, colDelta),
+    };
   }
 
-  return [];
+  return undefined;
 }
 
 // ============================================================================
@@ -734,4 +734,31 @@ export function shiftCFCols(
   }
 
   return updated;
+}
+
+// ============================================================================
+// MIGRATION
+// ============================================================================
+
+/**
+ * Migrate legacy token-based CF format (CellTokenRule[]) to new single-rule format (ConditionalRule).
+ * For cells with multiple token rules, takes the first rule (tokenIndex 0) as the cell rule.
+ * Safe to call on already-migrated data (passes through unchanged).
+ */
+export function migrateLegacyCF(
+  legacy: Record<string, any>
+): TableConditionalFormatting {
+  const result: TableConditionalFormatting = {};
+  for (const [key, val] of Object.entries(legacy)) {
+    if (Array.isArray(val) && val.length > 0) {
+      // Old format: CellTokenRule[] → pick the primary rule and strip tokenIndex
+      const primary = val.find((r: any) => r.tokenIndex === 0) || val[0];
+      const { tokenIndex: _, ...rule } = primary;
+      result[key] = rule as ConditionalRule;
+    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      // Already new format
+      result[key] = val as ConditionalRule;
+    }
+  }
+  return result;
 }

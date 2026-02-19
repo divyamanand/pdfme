@@ -85,8 +85,8 @@ const TemplateEditor = ({
     maxZoom,
   });
 
-  const currentPageHasTables = (schemasList[pageCursor] ?? []).some(
-    (s) => s.type === 'table' || s.type === 'nestedTable',
+  const currentPageHasCFEligible = (schemasList[pageCursor] ?? []).some(
+    (s) => s.type !== 'image' && s.type !== 'signature',
   );
 
   const onEdit = (targets: HTMLElement[]) => {
@@ -393,7 +393,7 @@ const TemplateEditor = ({
             zoomLevel={zoomLevel}
             setZoomLevel={setZoomLevel}
             onCFClick={() => setCfDialogOpen(true)}
-            hasTables={currentPageHasTables}
+            hasCFEligible={currentPageHasCFEligible}
             {...pageManipulation}
           />
 

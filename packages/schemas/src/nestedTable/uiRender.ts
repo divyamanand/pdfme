@@ -1,7 +1,7 @@
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import type { NestedTableSchema } from './types.js';
 import type { Styles } from '../tables/types.js';
-import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter, shiftCellRefsInExpression } from '@pdfme/common';
+import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter, shiftCellRefsInExpression, resolveRulesForCell } from '@pdfme/common';
 import { createSingleTable } from '../tables/tableHelper.js';
 import { getBody, getBodyWithRange } from '../tables/helper.js';
 import cell from '../tables/cell.js';
@@ -326,6 +326,14 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
         mode: cellMode,
         onChange: (v) => {
           if (!arg.onChange) return;
+          if (schema.conditionalFormatting) {
+            const startRange = schema.__bodyRange?.start ?? 0;
+            const rule = resolveRulesForCell(schema.conditionalFormatting as any, rowIndex + startRange, colIndex);
+            if (rule) {
+              alert('This cell has a conditional formatting rule. Delete the rule first to edit this cell.');
+              return;
+            }
+          }
           const newValue = (Array.isArray(v) ? v[0].value : v.value) as string;
           const fullBody = getBody(value, leafLabels);
           const startRange = schema.__bodyRange?.start ?? 0;
@@ -368,13 +376,12 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
         // Apply column-wide wildcard CF rules to the new row for visibility
         if (schema.conditionalFormatting) {
           for (let c = 0; c < leaves.length; c++) {
-            const wcRules = schema.conditionalFormatting[`*:${c}`];
-            if (wcRules && wcRules.length > 0) {
-              const rule = wcRules[0];
-              const rowDelta = newRowIndex - (rule.sourceRow ?? 0);
+            const wcRule = schema.conditionalFormatting[`*:${c}`];
+            if (wcRule) {
+              const rowDelta = newRowIndex - (wcRule.sourceRow ?? 0);
               const expr = rowDelta === 0
-                ? rule.compiledExpression
-                : shiftCellRefsInExpression(rule.compiledExpression, rowDelta, 0);
+                ? wcRule.compiledExpression
+                : shiftCellRefsInExpression(wcRule.compiledExpression, rowDelta, 0);
               newRow[c] = `{{${expr}}}`;
             }
           }

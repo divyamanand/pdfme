@@ -21,6 +21,8 @@ import {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  evaluateSchemaConditionalFormatting,
+  buildTableCellContext,
 } from '@pdfme/common';
 import { PluginsRegistry } from '../../../contexts.js';
 import { X } from 'lucide-react';
@@ -484,6 +486,9 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
 
           const content = schema.content || '';
           let value = content;
+          const tableCellCtx = buildTableCellContext(schemasList as any,
+            schemasList.flat().reduce((acc, s) => { acc[s.name] = s.content || ''; return acc; }, {} as Record<string, string>)
+          );
           const variables = {
             ...schemasList.flat().reduce(
               (acc, currSchema) => {
@@ -492,6 +497,7 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
               },
               {} as Record<string, string>,
             ),
+            ...tableCellCtx,
             totalPages: schemasList.length,
             currentPage: index + 1,
           };
@@ -502,9 +508,22 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
             } else {
               // Evaluate {{...}} expressions for non-readOnly schemas in viewer mode
               if (schema.type === 'table' || schema.type === 'nestedTable') {
-                value = evaluateTableCellExpressions({ value, variables, schemas: schemasList });
+                const tableSchema = schema as any;
+                value = evaluateTableCellExpressions({
+                  value, variables, schemas: schemasList,
+                  conditionalFormatting: tableSchema.conditionalFormatting,
+                });
               } else if (schema.type !== 'image' && schema.type !== 'signature') {
-                value = evaluateExpressions({ content: value, variables, schemas: schemasList });
+                const schemaCF = (schema as any).conditionalFormatting;
+                if (schemaCF) {
+                  const cfResult = evaluateSchemaConditionalFormatting({
+                    rule: schemaCF, variables, schemas: schemasList,
+                  });
+                  if (cfResult !== null) value = cfResult;
+                  else value = evaluateExpressions({ content: value, variables, schemas: schemasList });
+                } else {
+                  value = evaluateExpressions({ content: value, variables, schemas: schemasList });
+                }
               }
             }
           }
@@ -523,6 +542,15 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
                       // Use type assertion to safely handle the argument
                       type ChangeArg = { key: string; value: unknown };
                       const args = Array.isArray(arg) ? (arg as ChangeArg[]) : [arg as ChangeArg];
+                      // Block content edits on non-table schemas with CF
+                      if (
+                        (schema as any).conditionalFormatting &&
+                        schema.type !== 'table' && schema.type !== 'nestedTable' &&
+                        args.some((a) => a.key === 'content')
+                      ) {
+                        alert('This field has a conditional formatting rule. Delete the rule first to edit this field.');
+                        return;
+                      }
                       changeSchemas(
                         args.map(({ key, value }) => ({ key, value, schemaId: schema.id })),
                       );

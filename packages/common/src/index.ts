@@ -64,7 +64,7 @@ import {
   isBlankPdf,
 } from './helper.js';
 import { getDynamicTemplate } from './dynamicTemplate.js';
-import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions, buildTableCellContext } from './expression.js';
+import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions, evaluateSchemaConditionalFormatting, buildTableCellContext } from './expression.js';
 import { pluginRegistry } from './pluginRegistry.js';
 import {
   colIndexToLetter,
@@ -80,11 +80,13 @@ import {
   shiftCFCols,
   shiftCellRefsInExpression,
   resolveRulesForCell,
+  migrateLegacyCF,
 } from './conditionalFormatting.js';
 import type {
   ConditionOperator,
   VisualConditionBranch,
   VisualRule,
+  ConditionalRule,
   CellTokenRule,
   CellKey,
   TableConditionalFormatting,
@@ -116,6 +118,7 @@ export {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  evaluateSchemaConditionalFormatting,
   buildTableCellContext,
   colIndexToLetter,
   colLetterToIndex,
@@ -130,6 +133,7 @@ export {
   shiftCFCols,
   shiftCellRefsInExpression,
   resolveRulesForCell,
+  migrateLegacyCF,
   checkFont,
   checkInputs,
   checkUIOptions,
@@ -175,6 +179,7 @@ export type {
   ConditionOperator,
   VisualConditionBranch,
   VisualRule,
+  ConditionalRule,
   CellTokenRule,
   CellKey,
   TableConditionalFormatting,

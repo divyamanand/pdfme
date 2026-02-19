@@ -3,7 +3,7 @@ import { Modal, Select, Button, Input, Space, AutoComplete } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import type {
   TableConditionalFormatting,
-  CellTokenRule,
+  ConditionalRule,
   VisualRule,
   ConditionOperator,
   ChangeSchemas,
@@ -11,10 +11,9 @@ import type {
 } from '@pdfme/common';
 import {
   colIndexToLetter,
-  parseTokens,
-  replaceTokenAtIndex,
   compileVisualRulesToExpression,
   shiftRule,
+  resolveRulesForCell,
 } from '@pdfme/common';
 import type { VisualConditionBranch } from '@pdfme/common';
 import { I18nContext } from '../../contexts.js';
@@ -43,6 +42,10 @@ interface ConditionalFormattingDialogProps {
   changeSchemas: ChangeSchemas;
 }
 
+// Filter for CF-eligible schemas (all except image/signature)
+const isCFEligible = (s: SchemaForUI) => s.type !== 'image' && s.type !== 'signature';
+const isTableType = (s: SchemaForUI) => s.type === 'table' || s.type === 'nestedTable';
+
 const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = ({
   open,
   onClose,
@@ -52,94 +55,77 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
 }) => {
   const i18n = useContext(I18nContext);
 
-  // Get all table/nestedTable schemas on current page
-  const tableSchemas = schemas.filter((s) => s.type === 'table' || s.type === 'nestedTable');
+  // Get all CF-eligible schemas on current page
+  const eligibleSchemas = schemas.filter(isCFEligible);
 
   // State
-  const [selectedTableId, setSelectedTableId] = useState<string>('');
+  const [selectedSchemaId, setSelectedSchemaId] = useState<string>('');
   const [selectedRow, setSelectedRow] = useState(0);
   const [selectedCol, setSelectedCol] = useState(0);
-  const [selectedTokenIndex, setSelectedTokenIndex] = useState(0);
   const [currentMode, setCurrentMode] = useState<'visual' | 'code'>('visual');
   const [scope, setScope] = useState<'cell' | 'column' | 'row'>('cell');
 
-  // Compute effective table ID synchronously — fallback to first table if current selection is invalid
-  const effectiveTableId = useMemo(() => {
-    if (selectedTableId && tableSchemas.some((s) => s.id === selectedTableId)) {
-      return selectedTableId;
+  // Compute effective schema ID synchronously
+  const effectiveSchemaId = useMemo(() => {
+    if (selectedSchemaId && eligibleSchemas.some((s) => s.id === selectedSchemaId)) {
+      return selectedSchemaId;
     }
-    return tableSchemas[0]?.id || '';
-  }, [selectedTableId, tableSchemas]);
+    return eligibleSchemas[0]?.id || '';
+  }, [selectedSchemaId, eligibleSchemas]);
 
-  // Reset selection state when effective table changes
+  // Reset selection state when effective schema changes
   useEffect(() => {
-    if (effectiveTableId !== selectedTableId) {
-      setSelectedTableId(effectiveTableId);
+    if (effectiveSchemaId !== selectedSchemaId) {
+      setSelectedSchemaId(effectiveSchemaId);
       setSelectedRow(0);
       setSelectedCol(0);
-      setSelectedTokenIndex(0);
     }
-  }, [effectiveTableId, selectedTableId]);
+  }, [effectiveSchemaId, selectedSchemaId]);
 
-  // Listen for canvas cell-select events
+  // Listen for canvas cell-select events (tables only)
   useEffect(() => {
     if (!open) return;
 
     const handleCellSelect = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.schemaId === effectiveTableId && detail.row !== undefined && detail.col !== undefined) {
+      if (detail?.schemaId === effectiveSchemaId && detail.row !== undefined && detail.col !== undefined) {
         setSelectedRow(detail.row);
         setSelectedCol(detail.col);
-        setSelectedTokenIndex(0);
       }
     };
 
     document.addEventListener('pdfme-table-cell-select', handleCellSelect);
     return () => document.removeEventListener('pdfme-table-cell-select', handleCellSelect);
-  }, [open, effectiveTableId]);
+  }, [open, effectiveSchemaId]);
 
-  const selectedSchema = tableSchemas.find((s) => s.id === effectiveTableId) as any;
+  const selectedSchema = eligibleSchemas.find((s) => s.id === effectiveSchemaId) as any;
+  const isTable = selectedSchema ? isTableType(selectedSchema) : false;
 
+  // Parse table content (only relevant for table types)
   const content: string[][] = useMemo(() => {
-    if (!selectedSchema) return [];
+    if (!selectedSchema || !isTable) return [];
     try {
       return JSON.parse(selectedSchema.content || '[]');
     } catch {
       return [];
     }
-  }, [selectedSchema?.content]);
+  }, [selectedSchema?.content, isTable]);
   const numRows = content.length;
   const numCols = content[0]?.length ?? 0;
 
-  const cf: TableConditionalFormatting = selectedSchema?.conditionalFormatting || {};
+  // Get CF data
+  const cf: TableConditionalFormatting = isTable ? (selectedSchema?.conditionalFormatting || {}) : {};
 
-  // Helper: get CF rules for a cell (cell-specific → *:col → row:*)
-  const getCFRules = (r: number = selectedRow, c: number = selectedCol): CellTokenRule[] => {
-    const cellKey = `${r}:${c}`;
-    const cellRules = (cf as any)[cellKey];
-    if (Array.isArray(cellRules) && cellRules.length > 0) return cellRules;
-    const colWildcard = (cf as any)[`*:${c}`];
-    if (Array.isArray(colWildcard) && colWildcard.length > 0) return colWildcard;
-    const rowWildcard = (cf as any)[`${r}:*`];
-    if (Array.isArray(rowWildcard) && rowWildcard.length > 0) return rowWildcard;
-    return [];
+  // For non-table schemas, the rule is stored directly on schema.conditionalFormatting
+  const nonTableRule: ConditionalRule | undefined = !isTable ? selectedSchema?.conditionalFormatting : undefined;
+
+  // Helper: get CF rule for a table cell
+  const getCFRule = (r: number = selectedRow, c: number = selectedCol): ConditionalRule | undefined => {
+    return resolveRulesForCell(cf, r, c);
   };
 
-  const getTokenRule = (): CellTokenRule | undefined => {
-    return getCFRules().find((r) => r.tokenIndex === selectedTokenIndex);
-  };
-
-  const cellHasRules = (row: number, col: number): boolean => {
-    return getCFRules(row, col).length > 0;
-  };
-
-  const getEffectiveTokens = (): { tokens: string[]; isVirtual: boolean } => {
-    const cellContent = (content[selectedRow] && content[selectedRow][selectedCol]) || '';
-    const tokens = parseTokens(cellContent);
-    if (tokens.length === 0) {
-      return { tokens: ['__cell_value__'], isVirtual: true };
-    }
-    return { tokens, isVirtual: false };
+  const cellHasRule = (row: number, col: number): boolean => {
+    return !!resolveRulesForCell(cf, row, col);
   };
 
   // Build autocomplete options — includes ALL schema field names + builtins + cell refs
@@ -159,125 +145,119 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
     }
     // Builtins
     for (const b of BUILTINS) add(b, `${b} (builtin)`);
-    // Current table cell refs
-    for (let r = 0; r < numRows; r++) {
-      for (let c = 0; c < numCols; c++) {
-        add(colIndexToLetter(c) + (r + 1));
-      }
-    }
-    // Cross-table cell refs (tableName.A1)
-    for (const s of schemas) {
-      if (s.type !== 'table' && s.type !== 'nestedTable') continue;
-      if (!s.name) continue;
-      try {
-        const rows: string[][] = JSON.parse((s as any).content || '[]');
-        for (let r = 0; r < rows.length; r++) {
-          for (let c = 0; c < (rows[0]?.length ?? 0); c++) {
-            add(`${s.name}.${colIndexToLetter(c)}${r + 1}`);
-          }
+    // Current table cell refs (if table)
+    if (isTable) {
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          add(colIndexToLetter(c) + (r + 1));
         }
-      } catch {
-        // skip
+      }
+      // Cross-table cell refs (tableName.A1)
+      for (const s of schemas) {
+        if (!isTableType(s) || !s.name) continue;
+        try {
+          const rows: string[][] = JSON.parse((s as any).content || '[]');
+          for (let r = 0; r < rows.length; r++) {
+            for (let c = 0; c < (rows[0]?.length ?? 0); c++) {
+              add(`${s.name}.${colIndexToLetter(c)}${r + 1}`);
+            }
+          }
+        } catch {
+          // skip
+        }
       }
     }
     return options;
-  }, [allSchemas, schemas, numRows, numCols]);
-
-  const applySingleCell = useCallback(
-    (updatedCF: any, updatedContent: string[][], row: number, col: number, rule: CellTokenRule): void => {
-      const key = `${row}:${col}`;
-      const existing: CellTokenRule[] = updatedCF[key] ? [...updatedCF[key]] : [];
-      const idx = existing.findIndex((r) => r.tokenIndex === rule.tokenIndex);
-      if (idx >= 0) existing[idx] = rule;
-      else existing.push(rule);
-      updatedCF[key] = existing;
-
-      if (!updatedContent[row]) return;
-      const cellText = updatedContent[row][col] ?? '';
-      const tokens = parseTokens(cellText);
-
-      if (tokens.length === 0) {
-        updatedContent[row][col] = `{{${rule.compiledExpression}}}`;
-      } else if (rule.tokenIndex < tokens.length) {
-        updatedContent[row][col] = replaceTokenAtIndex(
-          cellText,
-          rule.tokenIndex,
-          `{{${rule.compiledExpression}}}`,
-        );
-      }
-    },
-    [],
-  );
+  }, [allSchemas, schemas, isTable, numRows, numCols]);
 
   const schemaId = selectedSchema?.id || '';
 
-  const saveWithScope = useCallback(
-    (newRule: CellTokenRule): void => {
+  // Get current rule for editor
+  const existingRule: ConditionalRule | undefined = isTable ? getCFRule() : nonTableRule;
+
+  // Save handler for table schemas
+  const saveTableRule = useCallback(
+    (newRule: ConditionalRule): void => {
       if (!schemaId) return;
-      const updatedCF = { ...cf } as any;
-      const updatedContent = content.map((row) => [...row]);
+      const updatedCF = { ...cf };
 
       if (scope === 'cell') {
-        applySingleCell(updatedCF, updatedContent, selectedRow, selectedCol, newRule);
+        const key = `${selectedRow}:${selectedCol}`;
+        updatedCF[key] = newRule;
       } else if (scope === 'column') {
-        const wildcardRule: CellTokenRule = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
+        const wildcardRule: ConditionalRule = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
         const wcKey = `*:${selectedCol}`;
-        updatedCF[wcKey] = [wildcardRule];
+        updatedCF[wcKey] = wildcardRule;
+        // Also apply to all existing rows
         for (let r = 0; r < numRows; r++) {
+          const key = `${r}:${selectedCol}`;
           const rowDelta = r - selectedRow;
-          const shifted = rowDelta === 0 ? newRule : shiftRule(newRule, rowDelta, 0);
-          applySingleCell(updatedCF, updatedContent, r, selectedCol, shifted);
+          updatedCF[key] = rowDelta === 0 ? newRule : shiftRule(newRule, rowDelta, 0);
         }
       } else if (scope === 'row') {
-        const wildcardRule: CellTokenRule = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
+        const wildcardRule: ConditionalRule = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
         const wcKey = `${selectedRow}:*`;
-        updatedCF[wcKey] = [wildcardRule];
+        updatedCF[wcKey] = wildcardRule;
+        // Also apply to all existing cols
         for (let c = 0; c < numCols; c++) {
+          const key = `${selectedRow}:${c}`;
           const colDelta = c - selectedCol;
-          const shifted = colDelta === 0 ? newRule : shiftRule(newRule, 0, colDelta);
-          applySingleCell(updatedCF, updatedContent, selectedRow, c, shifted);
+          updatedCF[key] = colDelta === 0 ? newRule : shiftRule(newRule, 0, colDelta);
         }
       }
 
-      changeSchemas([
-        { key: 'content', value: JSON.stringify(updatedContent), schemaId },
-        { key: 'conditionalFormatting', value: updatedCF, schemaId },
-      ]);
+      changeSchemas([{ key: 'conditionalFormatting', value: updatedCF, schemaId }]);
     },
-    [cf, content, scope, selectedRow, selectedCol, schemaId, numRows, numCols, changeSchemas, applySingleCell],
+    [cf, scope, selectedRow, selectedCol, schemaId, numRows, numCols, changeSchemas],
   );
 
+  // Save handler for non-table schemas
+  const saveNonTableRule = useCallback(
+    (newRule: ConditionalRule): void => {
+      if (!schemaId) return;
+      changeSchemas([{ key: 'conditionalFormatting', value: newRule, schemaId }]);
+    },
+    [schemaId, changeSchemas],
+  );
+
+  const onSaveRule = useCallback(
+    (newRule: ConditionalRule): void => {
+      if (isTable) saveTableRule(newRule);
+      else saveNonTableRule(newRule);
+    },
+    [isTable, saveTableRule, saveNonTableRule],
+  );
+
+  // Clear handler
   const clearRule = useCallback(() => {
     if (!schemaId) return;
-    const updated = { ...cf } as any;
-    const key = `${selectedRow}:${selectedCol}`;
-    const existing: CellTokenRule[] = updated[key] ? [...updated[key]] : [];
-    const filtered = existing.filter((r) => r.tokenIndex !== selectedTokenIndex);
-    if (filtered.length === 0) delete updated[key];
-    else updated[key] = filtered;
-    changeSchemas([{ key: 'conditionalFormatting', value: updated, schemaId }]);
-  }, [cf, selectedRow, selectedCol, selectedTokenIndex, schemaId, changeSchemas]);
-
-  const { tokens: effectiveTokens, isVirtual } = getEffectiveTokens();
-  const existingRule = getTokenRule();
+    if (isTable) {
+      const updated = { ...cf };
+      const key = `${selectedRow}:${selectedCol}`;
+      delete updated[key];
+      changeSchemas([{ key: 'conditionalFormatting', value: updated, schemaId }]);
+    } else {
+      changeSchemas([{ key: 'conditionalFormatting', value: undefined, schemaId }]);
+    }
+  }, [cf, isTable, selectedRow, selectedCol, schemaId, changeSchemas]);
 
   if (!selectedSchema) {
     return (
       <Modal
-        title="Cell Conditions"
+        title="Conditional Formatting"
         open={open}
         onCancel={onClose}
         footer={null}
         width="min(960px, 90vw)"
       >
-        <p>No tables available on this page.</p>
+        <p>No eligible schemas on this page.</p>
       </Modal>
     );
   }
 
   return (
     <Modal
-      title="Cell Conditions"
+      title="Conditional Formatting"
       open={open}
       onCancel={onClose}
       footer={null}
@@ -285,19 +265,18 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
       styles={{ body: { maxHeight: '70vh', overflow: 'auto' } }}
       destroyOnClose
     >
-      {/* Table Selector */}
+      {/* Schema Selector */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 12, fontWeight: 600, marginRight: 8 }}>Table:</label>
+        <label style={{ fontSize: 12, fontWeight: 600, marginRight: 8 }}>Schema:</label>
         <Select
-          value={effectiveTableId}
+          value={effectiveSchemaId}
           onChange={(val) => {
-            setSelectedTableId(val);
+            setSelectedSchemaId(val);
             setSelectedRow(0);
             setSelectedCol(0);
-            setSelectedTokenIndex(0);
           }}
           style={{ width: 300 }}
-          options={tableSchemas.map((s) => ({
+          options={eligibleSchemas.map((s) => ({
             value: s.id,
             label: `${s.name} (${s.type})`,
           }))}
@@ -305,92 +284,75 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
       </div>
 
       <div style={{ display: 'flex', gap: 16 }}>
-        {/* Left: Cell Grid */}
-        <div style={{ flex: '0 0 35%', borderRight: '1px solid #f0f0f0', paddingRight: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Cell Selection</div>
+        {/* Left: Cell Grid (tables only) */}
+        {isTable && (
+          <div style={{ flex: '0 0 35%', borderRight: '1px solid #f0f0f0', paddingRight: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Cell Selection</div>
 
-          {/* Column headers */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-            <div style={{ width: 24, fontSize: 11, color: '#999' }}></div>
-            {Array.from({ length: numCols }, (_, i) => (
-              <div
-                key={i}
-                style={{
-                  width: 24,
-                  textAlign: 'center',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#666',
-                }}
-              >
-                {colIndexToLetter(i)}
-              </div>
-            ))}
-          </div>
-
-          {/* Body grid */}
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-            {Array.from({ length: numRows }, (_, r) => (
-              <div key={r} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                <div style={{ width: 24, fontSize: 11, color: '#999', textAlign: 'center' }}>{r + 1}</div>
-                {Array.from({ length: numCols }, (_, c) => (
-                  <button
-                    key={c}
-                    onClick={() => {
-                      setSelectedRow(r);
-                      setSelectedCol(c);
-                      setSelectedTokenIndex(0);
-                    }}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      padding: 0,
-                      border: r === selectedRow && c === selectedCol ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                      backgroundColor: r === selectedRow && c === selectedCol ? '#e6f7ff' : '#fff',
-                      borderRadius: 3,
-                      cursor: 'pointer',
-                      fontSize: 10,
-                      color: cellHasRules(r, c) ? '#1890ff' : '#999',
-                    }}
-                  >
-                    {cellHasRules(r, c) ? '●' : '·'}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right: Rule Editor */}
-        <div style={{ flex: '1 1 65%', paddingLeft: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
-            Cell {colIndexToLetter(selectedCol)}{selectedRow + 1} {cellHasRules(selectedRow, selectedCol) && '●'}
-          </div>
-
-          {/* Token Tabs */}
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>Tokens:</div>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {effectiveTokens.map((tok, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedTokenIndex(idx)}
+            {/* Column headers */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+              <div style={{ width: 24, fontSize: 11, color: '#999' }}></div>
+              {Array.from({ length: numCols }, (_, i) => (
+                <div
+                  key={i}
                   style={{
-                    padding: '4px 8px',
+                    width: 24,
+                    textAlign: 'center',
                     fontSize: 11,
-                    border: idx === selectedTokenIndex ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                    backgroundColor: idx === selectedTokenIndex ? '#e6f7ff' : '#fff',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    color: idx === selectedTokenIndex ? '#1890ff' : '#666',
-                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    color: '#666',
                   }}
                 >
-                  {isVirtual ? '[cell value]' : `{{${tok.length > 18 ? tok.substring(0, 16) + '…' : tok}}}`}
-                </button>
+                  {colIndexToLetter(i)}
+                </div>
+              ))}
+            </div>
+
+            {/* Body grid */}
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {Array.from({ length: numRows }, (_, r) => (
+                <div key={r} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                  <div style={{ width: 24, fontSize: 11, color: '#999', textAlign: 'center' }}>{r + 1}</div>
+                  {Array.from({ length: numCols }, (_, c) => (
+                    <button
+                      key={c}
+                      onClick={() => {
+                        setSelectedRow(r);
+                        setSelectedCol(c);
+                      }}
+                      style={{
+                        width: 24,
+                        height: 24,
+                        padding: 0,
+                        border: r === selectedRow && c === selectedCol ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                        backgroundColor: r === selectedRow && c === selectedCol ? '#e6f7ff' : '#fff',
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                        fontSize: 10,
+                        color: cellHasRule(r, c) ? '#1890ff' : '#999',
+                      }}
+                    >
+                      {cellHasRule(r, c) ? '●' : '·'}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </div>
+        )}
+
+        {/* Right: Rule Editor */}
+        <div style={{ flex: '1 1 65%', paddingLeft: isTable ? 12 : 0 }}>
+          {isTable && (
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+              Cell {colIndexToLetter(selectedCol)}{selectedRow + 1} {cellHasRule(selectedRow, selectedCol) && '●'}
+            </div>
+          )}
+          {!isTable && (
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+              {selectedSchema.name} {nonTableRule && '●'}
+            </div>
+          )}
 
           {/* Mode Toggle */}
           <div style={{ marginBottom: 12, display: 'flex', gap: 4 }}>
@@ -430,59 +392,61 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
           <RuleEditor
             mode={currentMode}
             existingRule={existingRule}
-            onSave={saveWithScope}
+            onSave={onSaveRule}
             onClear={clearRule}
             autocompleteOptions={autocompleteOptions}
           />
 
-          {/* Scope Selector */}
-          <div style={{ marginTop: 12, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
-            <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>Apply to:</div>
-            <Space>
-              <button
-                onClick={() => setScope('cell')}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: 10,
-                  border: scope === 'cell' ? '1px solid #722ed1' : '1px solid #d9d9d9',
-                  backgroundColor: scope === 'cell' ? '#f9f0ff' : '#fff',
-                  color: scope === 'cell' ? '#722ed1' : '#666',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-              >
-                {colIndexToLetter(selectedCol)}{selectedRow + 1} only
-              </button>
-              <button
-                onClick={() => setScope('column')}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: 10,
-                  border: scope === 'column' ? '1px solid #722ed1' : '1px solid #d9d9d9',
-                  backgroundColor: scope === 'column' ? '#f9f0ff' : '#fff',
-                  color: scope === 'column' ? '#722ed1' : '#666',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-              >
-                Col {colIndexToLetter(selectedCol)} (all rows)
-              </button>
-              <button
-                onClick={() => setScope('row')}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: 10,
-                  border: scope === 'row' ? '1px solid #722ed1' : '1px solid #d9d9d9',
-                  backgroundColor: scope === 'row' ? '#f9f0ff' : '#fff',
-                  color: scope === 'row' ? '#722ed1' : '#666',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-              >
-                Row {selectedRow + 1} (all cols)
-              </button>
-            </Space>
-          </div>
+          {/* Scope Selector (tables only) */}
+          {isTable && (
+            <div style={{ marginTop: 12, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+              <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>Apply to:</div>
+              <Space>
+                <button
+                  onClick={() => setScope('cell')}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 10,
+                    border: scope === 'cell' ? '1px solid #722ed1' : '1px solid #d9d9d9',
+                    backgroundColor: scope === 'cell' ? '#f9f0ff' : '#fff',
+                    color: scope === 'cell' ? '#722ed1' : '#666',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {colIndexToLetter(selectedCol)}{selectedRow + 1} only
+                </button>
+                <button
+                  onClick={() => setScope('column')}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 10,
+                    border: scope === 'column' ? '1px solid #722ed1' : '1px solid #d9d9d9',
+                    backgroundColor: scope === 'column' ? '#f9f0ff' : '#fff',
+                    color: scope === 'column' ? '#722ed1' : '#666',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Col {colIndexToLetter(selectedCol)} (all rows)
+                </button>
+                <button
+                  onClick={() => setScope('row')}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 10,
+                    border: scope === 'row' ? '1px solid #722ed1' : '1px solid #d9d9d9',
+                    backgroundColor: scope === 'row' ? '#f9f0ff' : '#fff',
+                    color: scope === 'row' ? '#722ed1' : '#666',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Row {selectedRow + 1} (all cols)
+                </button>
+              </Space>
+            </div>
+          )}
         </div>
       </div>
     </Modal>
@@ -491,8 +455,8 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
 
 interface RuleEditorProps {
   mode: 'visual' | 'code';
-  existingRule: CellTokenRule | undefined;
-  onSave: (rule: CellTokenRule) => void;
+  existingRule: ConditionalRule | undefined;
+  onSave: (rule: ConditionalRule) => void;
   onClear: () => void;
   autocompleteOptions: { value: string; label: string }[];
 }
@@ -511,7 +475,6 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ mode, existingRule, onSave, onC
         onSave={() => {
           const compiled = compileVisualRulesToExpression(visualRule);
           onSave({
-            tokenIndex: 0,
             mode: 'visual',
             visualRule: JSON.parse(JSON.stringify(visualRule)),
             compiledExpression: compiled,
@@ -529,7 +492,6 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ mode, existingRule, onSave, onC
       onChange={setCodeValue}
       onSave={() => {
         onSave({
-          tokenIndex: 0,
           mode: 'code',
           compiledExpression: codeValue.trim(),
         });
@@ -557,7 +519,7 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
   const addBranch = () => {
     onRuleChange({
       ...rule,
-      branches: [...rule.branches, { field: '', operator: '==', value: '', result: '' }],
+      branches: [...rule.branches, { field: '', operator: '==', value: '', result: '', valueIsVariable: false, resultIsVariable: false }],
     });
   };
 
@@ -583,6 +545,7 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
               options={autocompleteOptions}
               filterOption={filterOption}
               value={branch.field}
+              onSelect={(val) => updateBranch(idx, 'field', val)}
               onChange={(val) => updateBranch(idx, 'field', val)}
               placeholder="field"
               style={{ width: 100, fontSize: 11 }}
@@ -604,7 +567,15 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
                 options={autocompleteOptions}
                 filterOption={filterOption}
                 value={branch.value}
-                onChange={(val) => updateBranch(idx, 'value', val)}
+                onSelect={(val) => {
+                  updateBranch(idx, 'value', val);
+                  updateBranch(idx, 'valueIsVariable', true);
+                }}
+                onChange={(val) => {
+                  updateBranch(idx, 'value', val);
+                  const isKnown = autocompleteOptions.some(opt => opt.value === val);
+                  updateBranch(idx, 'valueIsVariable', isKnown);
+                }}
                 placeholder="value"
                 style={{ width: 100, fontSize: 11 }}
                 size="small"
@@ -615,7 +586,15 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
               options={autocompleteOptions}
               filterOption={filterOption}
               value={branch.result}
-              onChange={(val) => updateBranch(idx, 'result', val)}
+              onSelect={(val) => {
+                updateBranch(idx, 'result', val);
+                updateBranch(idx, 'resultIsVariable', true);
+              }}
+              onChange={(val) => {
+                updateBranch(idx, 'result', val);
+                const isKnown = autocompleteOptions.some(opt => opt.value === val);
+                updateBranch(idx, 'resultIsVariable', isKnown);
+              }}
               placeholder="result"
               style={{ width: 100, fontSize: 11 }}
               size="small"
@@ -635,8 +614,25 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
         + Add Rule
       </Button>
 
-      <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f5f5f5', borderRadius: 4, fontSize: 10, fontFamily: 'monospace' }}>
-        ELSE: <Input.TextArea value={rule.defaultResult} onChange={(e) => onRuleChange({ ...rule, defaultResult: e.target.value })} rows={1} />
+      <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f5f5f5', borderRadius: 4, fontSize: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontWeight: 600 }}>ELSE:</span>
+          <AutoComplete
+            options={autocompleteOptions}
+            filterOption={filterOption}
+            value={rule.defaultResult}
+            onSelect={(val) => {
+              onRuleChange({ ...rule, defaultResult: val, defaultResultIsVariable: true });
+            }}
+            onChange={(val) => {
+              const isKnown = autocompleteOptions.some(opt => opt.value === val);
+              onRuleChange({ ...rule, defaultResult: val, defaultResultIsVariable: isKnown });
+            }}
+            placeholder="default result"
+            style={{ flex: 1, fontSize: 11 }}
+            size="small"
+          />
+        </div>
       </div>
 
       <div style={{ marginBottom: 8, padding: 6, backgroundColor: '#f5f5f5', borderRadius: 3, fontSize: 10, fontFamily: 'monospace' }}>

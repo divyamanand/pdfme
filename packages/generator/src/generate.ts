@@ -7,6 +7,7 @@ import {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  evaluateSchemaConditionalFormatting,
   buildTableCellContext,
   pt2mm,
   cloneDeep,
@@ -19,6 +20,25 @@ import {
   getEmbedPdfPages,
   validateRequiredFields,
 } from './helper.js';
+
+/**
+ * Normalizes table input data by stringifying arrays
+ * Converts array format to JSON string for table/nestedTable fields
+ */
+const normalizeTableInput = (value: unknown, schemaType?: string): string => {
+  // For table/nestedTable types, always stringify array inputs
+  if ((schemaType === 'table' || schemaType === 'nestedTable') && Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+
+  // For other object types, stringify
+  if (typeof value === 'object' && value !== null) {
+    return JSON.stringify(value);
+  }
+
+  // Otherwise return as string
+  return (value !== null && value !== '' ? String(value) : '') as string;
+};
 
 const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> => {
   checkGenerateProps(props);
@@ -119,10 +139,10 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
               collected[v] = String(input[v] ?? '');
             });
             value = JSON.stringify(collected);
-          } else if (typeof rawInput === 'object' && rawInput !== null) {
-            value = JSON.stringify(rawInput);
+          } else if (rawInput !== null && rawInput !== undefined) {
+            value = normalizeTableInput(rawInput, staticSchema.type);
           } else {
-            value = (rawInput || staticSchema.content || '') as string;
+            value = (staticSchema.content || '') as string;
           }
 
           // Evaluate {{...}} expressions for non-readOnly schemas
@@ -136,7 +156,18 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
                 conditionalFormatting: tableSchema.conditionalFormatting,
               });
             } else if (staticSchema.type !== 'image' && staticSchema.type !== 'signature') {
-              value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+              const schemaCF = (staticSchema as any).conditionalFormatting;
+              if (schemaCF) {
+                const cfResult = evaluateSchemaConditionalFormatting({
+                  rule: schemaCF,
+                  variables: varsContext,
+                  schemas,
+                });
+                if (cfResult !== null) value = cfResult;
+                else value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+              } else {
+                value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+              }
             }
           }
 
@@ -193,11 +224,11 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
             collected[v] = String(input[v] ?? '');
           });
           value = JSON.stringify(collected);
-        } else if (typeof rawInput === 'object' && rawInput !== null) {
-          value = JSON.stringify(rawInput);
+        } else if (rawInput !== null && rawInput !== undefined) {
+          value = normalizeTableInput(rawInput, schema.type);
         } else {
-          // Use rawInput if provided, otherwise fall back to schema.content for expression evaluation
-          value = (rawInput !== null && rawInput !== '' ? String(rawInput) : (schema.content || '')) as string;
+          // Use schema.content for expression evaluation
+          value = (schema.content || '') as string;
         }
 
         // Evaluate {{...}} expressions for non-readOnly schemas
@@ -211,7 +242,18 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
               conditionalFormatting: tableSchema.conditionalFormatting,
             });
           } else if (schema.type !== 'image' && schema.type !== 'signature') {
-            value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+            const schemaCF = (schema as any).conditionalFormatting;
+            if (schemaCF) {
+              const cfResult = evaluateSchemaConditionalFormatting({
+                rule: schemaCF,
+                variables: varsContext,
+                schemas,
+              });
+              if (cfResult !== null) value = cfResult;
+              else value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+            } else {
+              value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+            }
           }
         }
 

@@ -672,7 +672,7 @@ describe('evaluateTableCellExpressions', () => {
     expect(JSON.parse(result)).toEqual([[1, 2], [true, false]]);
   });
 
-  it('should evaluate conditionalFormatting rules for specific tokens', () => {
+  it('should evaluate conditionalFormatting rule replacing entire cell', () => {
     const value = '[["Invoice {{amount}} due on {{dueDate}}"]]';
     const variables = { amount: 1500, dueDate: '2024-01-01' };
     const result = evaluateTableCellExpressions({
@@ -680,17 +680,15 @@ describe('evaluateTableCellExpressions', () => {
       variables,
       schemas: [],
       conditionalFormatting: {
-        '0:0': [
-          {
-            tokenIndex: 0,
-            mode: 'code' as const,
-            compiledExpression: 'amount > 1000 ? "High" : "Low"',
-          },
-        ],
+        '0:0': {
+          mode: 'code' as const,
+          compiledExpression: 'amount > 1000 ? "High" : "Low"',
+        },
       },
     });
     const parsed = JSON.parse(result);
-    expect(parsed[0][0]).toBe('Invoice High due on 2024-01-01');
+    // CF replaces entire cell value
+    expect(parsed[0][0]).toBe('High');
   });
 
   it('should leave cells without CF rules on the old path', () => {

@@ -8,6 +8,7 @@ import {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  evaluateSchemaConditionalFormatting,
   buildTableCellContext,
 } from '@pdfme/common';
 import { getDynamicHeightsForTable } from '@pdfme/schemas/utils';
@@ -120,6 +121,16 @@ const Preview = ({
     onChangeInput && onChangeInput({ index: unitCursor, name, value });
 
   const handleOnChangeRenderer = (args: { key: string; value: unknown }[], schema: SchemaForUI) => {
+    // Block content edits on non-table schemas with CF
+    if (
+      (schema as any).conditionalFormatting &&
+      schema.type !== 'table' && schema.type !== 'nestedTable' &&
+      args.some((a) => a.key === 'content')
+    ) {
+      alert('This field has a conditional formatting rule. Delete the rule first to edit this field.');
+      return;
+    }
+
     let isNeedInit = false;
     let newInputValue: string | undefined;
 
@@ -211,7 +222,18 @@ const Preview = ({
                     conditionalFormatting: tableSchema.conditionalFormatting,
                   });
                 } else if (schema.type !== 'image' && schema.type !== 'signature') {
-                  value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
+                  const schemaCF = (schema as any).conditionalFormatting;
+                  if (schemaCF) {
+                    const cfResult = evaluateSchemaConditionalFormatting({
+                      rule: schemaCF,
+                      variables: varsContext,
+                      schemas: schemasList,
+                    });
+                    if (cfResult !== null) value = cfResult;
+                    else value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
+                  } else {
+                    value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
+                  }
                 }
               }
             }

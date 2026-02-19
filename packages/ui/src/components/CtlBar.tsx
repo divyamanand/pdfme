@@ -112,7 +112,7 @@ type CtlBarProps = {
   clonePageAfter?: () => void;
   removePage?: () => void;
   onCFClick?: () => void;
-  hasTables?: boolean;
+  hasCFEligible?: boolean;
 };
 
 const CtlBar = (props: CtlBarProps) => {
@@ -130,7 +130,7 @@ const CtlBar = (props: CtlBarProps) => {
     clonePageAfter,
     removePage,
     onCFClick,
-    hasTables,
+    hasCFEligible,
   } = props;
 
   const contextMenuItems: MenuProps['items'] = [];
@@ -155,7 +155,7 @@ const CtlBar = (props: CtlBarProps) => {
 
   const barWidth = 300;
   const contextMenuWidth = contextMenuItems.length > 0 ? 50 : 0;
-  const cfButtonWidth = hasTables && onCFClick ? 40 : 0;
+  const cfButtonWidth = hasCFEligible && onCFClick ? 40 : 0;
   const width = (pageNum > 1 ? barWidth : barWidth / 2) + contextMenuWidth + cfButtonWidth;
 
   const textStyle = {
@@ -193,11 +193,11 @@ const CtlBar = (props: CtlBarProps) => {
             />
           </div>
         )}
-        {hasTables && onCFClick && (
+        {hasCFEligible && onCFClick && (
           <Button
             className={UI_CLASSNAME + 'cf-conditions'}
             type="text"
-            title="Cell Conditions"
+            title="Conditional Formatting"
             onClick={onCFClick}
             icon={<TableProperties size={16} color={textStyle.color} />}
           />

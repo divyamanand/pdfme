@@ -1,11 +1,9 @@
 import * as acorn from 'acorn';
 import type { Node as AcornNode, Identifier, Property } from 'estree';
 import type { SchemaPageArray } from './types.js';
-import type { TableConditionalFormatting } from './conditionalFormatting.js';
+import type { TableConditionalFormatting, ConditionalRule } from './conditionalFormatting.js';
 import {
   buildCellAddressMap,
-  parseTokens,
-  replaceTokenAtIndex,
   resolveRulesForCell,
 } from './conditionalFormatting.js';
 
@@ -625,7 +623,7 @@ export const evaluateExpressions = (arg: {
  * Evaluates {{...}} expressions in table cell values.
  * Parses a JSON string[][] (table), evaluates each cell independently, and returns stringified result.
  *
- * If conditionalFormatting rules are provided, they override the inline {{...}} expressions per token.
+ * If conditionalFormatting rules are provided, a matching rule replaces the entire cell value.
  * Otherwise, existing inline {{...}} evaluation proceeds unchanged (backward compatible).
  */
 export const evaluateTableCellExpressions = (arg: {
@@ -657,46 +655,25 @@ export const evaluateTableCellExpressions = (arg: {
           return cell;
         }
 
-        // Resolve rules: checks cell-specific, column-wildcard (*:col), row-wildcard (row:*) keys
-        const tokenRules = conditionalFormatting
+        // Resolve CF rule: checks cell-specific, column-wildcard (*:col), row-wildcard (row:*) keys
+        const rule = conditionalFormatting
           ? resolveRulesForCell(conditionalFormatting, rowIndex, colIndex)
-          : [];
+          : undefined;
 
-        // If no conditional formatting rules for this cell, use old path (backward compatible)
-        if (tokenRules.length === 0) {
-          return evaluateExpressions({
-            content: cell,
-            variables: augmentedVariables,
-            schemas,
-          });
-        }
-
-        // CONDITIONAL FORMATTING PATH
-        // Process cell token-by-token, applying rules as needed
-        const tokens = parseTokens(cell);
-        let resultCell = cell;
-
-        // Apply rules in reverse order (right-to-left) to keep string offsets stable
-        const sortedRules = [...tokenRules].sort((a: any, b: any) => b.tokenIndex - a.tokenIndex);
-
-        for (const rule of sortedRules) {
-          if (rule.tokenIndex >= tokens.length || rule.tokenIndex < 0) {
-            continue; // Skip out-of-range rules
-          }
-
+        if (rule) {
+          // CF replaces entire cell value
           try {
-            // Evaluate the compiled expression in the augmented context
             const evalContext = buildEvalContext(augmentedVariables, schemas);
-            const ruleResult = evaluateCompiledExpression(rule.compiledExpression, evalContext);
-            resultCell = replaceTokenAtIndex(resultCell, rule.tokenIndex, String(ruleResult ?? ''));
+            const result = evaluateCompiledExpression(rule.compiledExpression, evalContext);
+            return String(result ?? '');
           } catch {
-            // On error, leave the token unchanged (fail-safe)
+            return cell; // fail-safe: keep original cell value
           }
         }
 
-        // Evaluate any remaining {{...}} tokens (not covered by rules)
+        // No CF: evaluate {{expr}} tokens normally
         return evaluateExpressions({
-          content: resultCell,
+          content: cell,
           variables: augmentedVariables,
           schemas,
         });
@@ -707,5 +684,23 @@ export const evaluateTableCellExpressions = (arg: {
   } catch {
     // Not valid JSON or parse error, return as-is
     return value;
+  }
+};
+
+/**
+ * Evaluates a conditional formatting rule for a non-table schema.
+ * Returns the evaluated result string, or null if evaluation fails.
+ */
+export const evaluateSchemaConditionalFormatting = (arg: {
+  rule: ConditionalRule;
+  variables: Record<string, unknown>;
+  schemas: SchemaPageArray;
+}): string | null => {
+  try {
+    const context = buildEvalContext(arg.variables, arg.schemas);
+    const result = evaluateCompiledExpression(arg.rule.compiledExpression, context);
+    return String(result ?? '');
+  } catch {
+    return null;
   }
 };

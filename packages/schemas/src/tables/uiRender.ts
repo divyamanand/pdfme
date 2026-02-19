@@ -1,6 +1,6 @@
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import type { TableSchema, CellStyle, Styles } from './types.js';
-import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter, shiftCellRefsInExpression } from '@pdfme/common';
+import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter, shiftCellRefsInExpression, resolveRulesForCell } from '@pdfme/common';
 import { createSingleTable } from './tableHelper.js';
 import { getBody, getBodyWithRange } from './helper.js';
 import cell from './cell.js';
@@ -163,6 +163,14 @@ const renderRowUi = (args: {
         mode,
         onChange: (v) => {
           if (!arg.onChange) return;
+          if (section === 'body' && arg.schema.conditionalFormatting) {
+            const startRange = arg.schema.__bodyRange?.start ?? 0;
+            const rule = resolveRulesForCell(arg.schema.conditionalFormatting, rowIndex + startRange, colIndex);
+            if (rule) {
+              alert('This cell has a conditional formatting rule. Delete the rule first to edit this cell.');
+              return;
+            }
+          }
           const newValue = (Array.isArray(v) ? v[0].value : v.value) as string;
           if (section === 'body') {
             const startRange = arg.schema.__bodyRange?.start ?? 0;
@@ -263,13 +271,12 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
         // Apply column-wide wildcard CF rules to the new row for visibility
         if (schema.conditionalFormatting) {
           for (let c = 0; c < schema.head.length; c++) {
-            const wcRules = schema.conditionalFormatting[`*:${c}`];
-            if (wcRules && wcRules.length > 0) {
-              const rule = wcRules[0];
-              const rowDelta = newRowIndex - (rule.sourceRow ?? 0);
+            const wcRule = schema.conditionalFormatting[`*:${c}`];
+            if (wcRule) {
+              const rowDelta = newRowIndex - (wcRule.sourceRow ?? 0);
               const expr = rowDelta === 0
-                ? rule.compiledExpression
-                : shiftCellRefsInExpression(rule.compiledExpression, rowDelta, 0);
+                ? wcRule.compiledExpression
+                : shiftCellRefsInExpression(wcRule.compiledExpression, rowDelta, 0);
               newRow[c] = `{{${expr}}}`;
             }
           }
@@ -346,13 +353,12 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
         const newContent = bodyWidthRange.map((row, i) => {
           let cellVal = `Row ${i + 1}`;
           if (schema.conditionalFormatting) {
-            const wcRules = schema.conditionalFormatting[`${i}:*`];
-            if (wcRules && wcRules.length > 0) {
-              const rule = wcRules[0];
-              const colDelta = newColIndex - (rule.sourceCol ?? 0);
+            const wcRule = schema.conditionalFormatting[`${i}:*`];
+            if (wcRule) {
+              const colDelta = newColIndex - (wcRule.sourceCol ?? 0);
               const expr = colDelta === 0
-                ? rule.compiledExpression
-                : shiftCellRefsInExpression(rule.compiledExpression, 0, colDelta);
+                ? wcRule.compiledExpression
+                : shiftCellRefsInExpression(wcRule.compiledExpression, 0, colDelta);
               cellVal = `{{${expr}}}`;
             }
           }
