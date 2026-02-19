@@ -88,8 +88,25 @@ const getFontProp = ({
 };
 
 export const pdfRender = async (arg: PDFRenderProps<TextSchema>) => {
-  const { value, pdfDoc, pdfLib, page, options, schema, _cache } = arg;
+  const { value, pdfDoc, pdfLib, page, options, schema: _schema, _cache } = arg;
   if (!value) return;
+
+  // Apply CF style overrides if present
+  let schema = _schema;
+  const cfStyles = (_schema as any).__cfStyles;
+  if (cfStyles) {
+    schema = { ..._schema };
+    if (cfStyles.fontColor !== undefined) schema.fontColor = cfStyles.fontColor;
+    if (cfStyles.backgroundColor !== undefined) schema.backgroundColor = cfStyles.backgroundColor;
+    if (cfStyles.fontSize !== undefined) schema.fontSize = cfStyles.fontSize;
+    if (cfStyles.alignment !== undefined) schema.alignment = cfStyles.alignment;
+    if (cfStyles.verticalAlignment !== undefined) schema.verticalAlignment = cfStyles.verticalAlignment;
+    if (cfStyles.lineHeight !== undefined) schema.lineHeight = cfStyles.lineHeight;
+    if (cfStyles.characterSpacing !== undefined) schema.characterSpacing = cfStyles.characterSpacing;
+    if (cfStyles.fontName !== undefined) schema.fontName = cfStyles.fontName;
+    if (cfStyles.strikethrough !== undefined) schema.strikethrough = cfStyles.strikethrough;
+    if (cfStyles.underline !== undefined) schema.underline = cfStyles.underline;
+  }
 
   const { font = getDefaultFont(), colorType } = options;
 

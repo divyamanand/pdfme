@@ -18,6 +18,7 @@ import {
   ChangeSchemas,
   BasePdf,
   isBlankPdf,
+  getPagePadding,
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
@@ -185,7 +186,7 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
     let leftPadding = 0;
 
     if (isBlankPdf(basePdf)) {
-      const [t, r, b, l] = basePdf.padding;
+      const [t, r, b, l] = getPagePadding(basePdf, pageCursor);
       topPadding = t * ZOOM;
       rightPadding = r;
       bottomPadding = b;
@@ -279,7 +280,7 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
     let leftPadding = 0;
 
     if (isBlankPdf(basePdf)) {
-      const [t, r, b, l] = basePdf.padding;
+      const [t, r, b, l] = getPagePadding(basePdf, pageCursor);
       topPadding = t * ZOOM;
       rightPadding = mm2px(r);
       bottomPadding = mm2px(b);
@@ -423,13 +424,18 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
         schemasList={schemasList}
         pageSizes={pageSizes}
         backgrounds={backgrounds}
+        pageBackgroundColors={
+          isBlankPdf(basePdf) && basePdf.pageSettings
+            ? basePdf.pageSettings.map((s) => s?.backgroundColor)
+            : undefined
+        }
         hasRulers={true}
         renderPaper={({ index, paperSize }) => (
           <>
             {!editing && activeElements.length > 0 && pageCursor === index && (
               <DeleteButton activeElements={activeElements} />
             )}
-            <Padding basePdf={basePdf} />
+            <Padding basePdf={basePdf} pageCursor={pageCursor} />
             <StaticSchema
               template={{ schemas: schemasList, basePdf }}
               input={Object.fromEntries(
@@ -505,22 +511,34 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
           if (mode !== 'designer') {
             if (schema.readOnly) {
               value = replacePlaceholders({ content, variables, schemas: schemasList });
+              // Also evaluate {{expr}} expressions in readOnly content
+              value = evaluateExpressions({ content: value, variables, schemas: schemasList });
             } else {
               // Evaluate {{...}} expressions for non-readOnly schemas in viewer mode
               if (schema.type === 'table' || schema.type === 'nestedTable') {
                 const tableSchema = schema as any;
-                value = evaluateTableCellExpressions({
+                const tableCFResult = evaluateTableCellExpressions({
                   value, variables, schemas: schemasList,
                   conditionalFormatting: tableSchema.conditionalFormatting,
                 });
+                value = tableCFResult.value;
+                if (tableCFResult.cellStyles) {
+                  (schema as any).__cfCellStyles = tableCFResult.cellStyles;
+                }
               } else if (schema.type !== 'image' && schema.type !== 'signature') {
                 const schemaCF = (schema as any).conditionalFormatting;
                 if (schemaCF) {
                   const cfResult = evaluateSchemaConditionalFormatting({
                     rule: schemaCF, variables, schemas: schemasList,
                   });
-                  if (cfResult !== null) value = cfResult;
-                  else value = evaluateExpressions({ content: value, variables, schemas: schemasList });
+                  if (cfResult !== null) {
+                    value = cfResult.value;
+                    if (cfResult.styles) {
+                      (schema as any).__cfStyles = cfResult.styles;
+                    }
+                  } else {
+                    value = evaluateExpressions({ content: value, variables, schemas: schemasList });
+                  }
                 } else {
                   value = evaluateExpressions({ content: value, variables, schemas: schemasList });
                 }

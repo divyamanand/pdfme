@@ -4,6 +4,7 @@ import {
   SchemaForUI,
   PreviewProps,
   Size,
+  isBlankPdf,
   getDynamicTemplate,
   replacePlaceholders,
   evaluateExpressions,
@@ -196,6 +197,11 @@ const Preview = ({
           schemasList={schemasList}
           pageSizes={pageSizes}
           backgrounds={backgrounds}
+          pageBackgroundColors={
+            isBlankPdf(template.basePdf) && template.basePdf.pageSettings
+              ? template.basePdf.pageSettings.map((s) => s?.backgroundColor)
+              : undefined
+          }
           renderSchema={({ schema, index }) => {
             let value: string;
             const tableCellCtx = buildTableCellContext(schemasList as any, input || {});
@@ -206,6 +212,8 @@ const Preview = ({
                 variables: varsContext,
                 schemas: schemasList,
               });
+              // Also evaluate {{expr}} expressions in readOnly content
+              value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
             } else {
               const userInput = input && input[schema.name];
               const rawSource = userInput ? String(userInput) : (schema.content || '');
@@ -215,12 +223,16 @@ const Preview = ({
               if (value) {
                 if (schema.type === 'table' || schema.type === 'nestedTable') {
                   const tableSchema = schema as any;
-                  value = (evaluateTableCellExpressions as any)({
+                  const tableCFResult = (evaluateTableCellExpressions as any)({
                     value,
                     variables: varsContext,
                     schemas: schemasList,
                     conditionalFormatting: tableSchema.conditionalFormatting,
                   });
+                  value = tableCFResult.value;
+                  if (tableCFResult.cellStyles) {
+                    (schema as any).__cfCellStyles = tableCFResult.cellStyles;
+                  }
                 } else if (schema.type !== 'image' && schema.type !== 'signature') {
                   const schemaCF = (schema as any).conditionalFormatting;
                   if (schemaCF) {
@@ -229,8 +241,14 @@ const Preview = ({
                       variables: varsContext,
                       schemas: schemasList,
                     });
-                    if (cfResult !== null) value = cfResult;
-                    else value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
+                    if (cfResult !== null) {
+                      value = cfResult.value;
+                      if (cfResult.styles) {
+                        (schema as any).__cfStyles = cfResult.styles;
+                      }
+                    } else {
+                      value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
+                    }
                   } else {
                     value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
                   }

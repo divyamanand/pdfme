@@ -62,6 +62,8 @@ import {
   isHexValid,
   getInputFromTemplate,
   isBlankPdf,
+  getPagePadding,
+  getPageBackgroundColor,
 } from './helper.js';
 import { getDynamicTemplate } from './dynamicTemplate.js';
 import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions, evaluateSchemaConditionalFormatting, buildTableCellContext } from './expression.js';
@@ -74,6 +76,7 @@ import {
   parseTokens,
   replaceTokenAtIndex,
   compileVisualRulesToExpression,
+  compileCondition,
   tryParseExpressionToVisualRule,
   shiftRule,
   shiftCFRows,
@@ -90,6 +93,9 @@ import type {
   CellTokenRule,
   CellKey,
   TableConditionalFormatting,
+  CFStyleOverrides,
+  CFEvaluationResult,
+  TableCFEvaluationResult,
 } from './conditionalFormatting.js';
 
 export {
@@ -114,6 +120,8 @@ export {
   isHexValid,
   getInputFromTemplate,
   isBlankPdf,
+  getPagePadding,
+  getPageBackgroundColor,
   getDynamicTemplate,
   replacePlaceholders,
   evaluateExpressions,
@@ -134,6 +142,7 @@ export {
   shiftCellRefsInExpression,
   resolveRulesForCell,
   migrateLegacyCF,
+  compileCondition,
   checkFont,
   checkInputs,
   checkUIOptions,
@@ -183,4 +192,7 @@ export type {
   CellTokenRule,
   CellKey,
   TableConditionalFormatting,
+  CFStyleOverrides,
+  CFEvaluationResult,
+  TableCFEvaluationResult,
 };

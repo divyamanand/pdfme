@@ -1,6 +1,6 @@
 import React from 'react';
 import type * as CSS from 'csstype';
-import { ZOOM, BasePdf, isBlankPdf } from '@pdfme/common';
+import { ZOOM, BasePdf, isBlankPdf, getPagePadding } from '@pdfme/common';
 import { theme } from 'antd';
 
 const getPaddingStyle = (i: number, p: number, color: string): CSS.Properties => {
@@ -42,13 +42,13 @@ const getPaddingStyle = (i: number, p: number, color: string): CSS.Properties =>
   return style;
 };
 
-const Padding = ({ basePdf }: { basePdf: BasePdf }) => {
+const Padding = ({ basePdf, pageCursor = 0 }: { basePdf: BasePdf; pageCursor?: number }) => {
+  const padding = isBlankPdf(basePdf) ? getPagePadding(basePdf, pageCursor) : [];
   return (
     <>
-      {isBlankPdf(basePdf) &&
-        basePdf.padding.map((p, i) => (
-          <div key={String(i)} style={getPaddingStyle(i, p, theme.useToken().token.colorError)} />
-        ))}
+      {padding.map((p, i) => (
+        <div key={String(i)} style={getPaddingStyle(i, p, theme.useToken().token.colorError)} />
+      ))}
     </>
   );
 };

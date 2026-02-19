@@ -164,7 +164,23 @@ export const buildStyledTextContainer = (
   fontKitFont: FontKitFont,
   value: string,
 ) => {
-  const { schema, rootElement, mode } = arg;
+  let { schema, rootElement, mode } = arg;
+
+  // Apply CF style overrides if present
+  const cfStyles = (schema as any).__cfStyles;
+  if (cfStyles) {
+    schema = { ...schema };
+    if (cfStyles.fontColor !== undefined) schema.fontColor = cfStyles.fontColor;
+    if (cfStyles.backgroundColor !== undefined) schema.backgroundColor = cfStyles.backgroundColor;
+    if (cfStyles.fontSize !== undefined) schema.fontSize = cfStyles.fontSize;
+    if (cfStyles.alignment !== undefined) schema.alignment = cfStyles.alignment;
+    if (cfStyles.verticalAlignment !== undefined) schema.verticalAlignment = cfStyles.verticalAlignment;
+    if (cfStyles.lineHeight !== undefined) schema.lineHeight = cfStyles.lineHeight;
+    if (cfStyles.characterSpacing !== undefined) schema.characterSpacing = cfStyles.characterSpacing;
+    if (cfStyles.fontName !== undefined) schema.fontName = cfStyles.fontName;
+    if (cfStyles.strikethrough !== undefined) schema.strikethrough = cfStyles.strikethrough;
+    if (cfStyles.underline !== undefined) schema.underline = cfStyles.underline;
+  }
 
   let dynamicFontSize: undefined | number = undefined;
 

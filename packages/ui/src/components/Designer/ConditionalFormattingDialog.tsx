@@ -8,6 +8,7 @@ import type {
   ConditionOperator,
   ChangeSchemas,
   SchemaForUI,
+  CFStyleOverrides,
 } from '@pdfme/common';
 import {
   colIndexToLetter,
@@ -41,6 +42,80 @@ interface ConditionalFormattingDialogProps {
   allSchemas: SchemaForUI[];
   changeSchemas: ChangeSchemas;
 }
+
+// Branch style picker component for per-branch styles, prefix, suffix
+const BranchStylePicker: React.FC<{
+  styles?: CFStyleOverrides;
+  prefix?: string;
+  suffix?: string;
+  onChange: (styles: CFStyleOverrides | undefined) => void;
+  onPrefixChange: (v: string) => void;
+  onSuffixChange: (v: string) => void;
+}> = ({ styles, prefix, suffix, onChange, onPrefixChange, onSuffixChange }) => {
+  const [expanded, setExpanded] = useState(false);
+  const hasStyles = styles && Object.keys(styles).length > 0;
+
+  const updateStyle = (key: keyof CFStyleOverrides, value: any) => {
+    const updated = { ...(styles || {}) };
+    if (value === undefined || value === '' || value === null || value === false) {
+      delete (updated as any)[key];
+    } else {
+      (updated as any)[key] = value;
+    }
+    onChange(Object.keys(updated).length > 0 ? updated : undefined);
+  };
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <Input size="small" value={prefix || ''} onChange={(e) => onPrefixChange(e.target.value)} placeholder="prefix" style={{ width: 60, fontSize: 10 }} />
+        <span style={{ fontSize: 10, color: '#999' }}>[ result ]</span>
+        <Input size="small" value={suffix || ''} onChange={(e) => onSuffixChange(e.target.value)} placeholder="suffix" style={{ width: 60, fontSize: 10 }} />
+        <button
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            fontSize: 10, padding: '2px 6px', cursor: 'pointer',
+            border: hasStyles ? '1px solid #1890ff' : '1px solid #d9d9d9',
+            backgroundColor: hasStyles ? '#e6f7ff' : '#fff',
+            borderRadius: 3,
+          }}
+        >
+          Style {hasStyles ? '●' : ''}
+        </button>
+      </div>
+      {expanded && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 4, marginTop: 4, backgroundColor: '#f9f9f9', borderRadius: 3, fontSize: 10, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            Font: <input type="color" value={styles?.fontColor || '#000000'} onChange={(e) => updateStyle('fontColor', e.target.value)} style={{ width: 24, height: 18, border: 'none', cursor: 'pointer' }} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            BG: <input type="color" value={styles?.backgroundColor || '#ffffff'} onChange={(e) => updateStyle('backgroundColor', e.target.value)} style={{ width: 24, height: 18, border: 'none', cursor: 'pointer' }} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            Size: <input type="number" value={styles?.fontSize ?? ''} onChange={(e) => updateStyle('fontSize', e.target.value ? Number(e.target.value) : undefined)} style={{ width: 40, fontSize: 10, height: 20 }} min={1} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            Align:
+            <select value={styles?.alignment || ''} onChange={(e) => updateStyle('alignment', e.target.value || undefined)} style={{ fontSize: 10, height: 20 }}>
+              <option value="">default</option>
+              <option value="left">left</option>
+              <option value="center">center</option>
+              <option value="right">right</option>
+            </select>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <input type="checkbox" checked={!!styles?.strikethrough} onChange={(e) => updateStyle('strikethrough', e.target.checked || undefined)} />
+            <span style={{ textDecoration: 'line-through' }}>S</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <input type="checkbox" checked={!!styles?.underline} onChange={(e) => updateStyle('underline', e.target.checked || undefined)} />
+            <span style={{ textDecoration: 'underline' }}>U</span>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Filter for CF-eligible schemas (all except image/signature)
 const isCFEligible = (s: SchemaForUI) => s.type !== 'image' && s.type !== 'signature';
@@ -466,6 +541,7 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ mode, existingRule, onSave, onC
     existingRule?.visualRule ? JSON.parse(JSON.stringify(existingRule.visualRule)) : { branches: [], defaultResult: '' },
   );
   const [codeValue, setCodeValue] = useState(existingRule?.compiledExpression || '');
+  const [codeStyles, setCodeStyles] = useState<CFStyleOverrides | undefined>(existingRule?.codeStyles);
 
   if (mode === 'visual') {
     return (
@@ -490,10 +566,13 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ mode, existingRule, onSave, onC
     <CodeRuleEditor
       value={codeValue}
       onChange={setCodeValue}
+      codeStyles={codeStyles}
+      onCodeStylesChange={setCodeStyles}
       onSave={() => {
         onSave({
           mode: 'code',
           compiledExpression: codeValue.trim(),
+          codeStyles,
         });
       }}
       onClear={onClear}
@@ -607,6 +686,14 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
               icon={<DeleteOutlined />}
             />
           </div>
+          <BranchStylePicker
+            styles={branch.styles}
+            prefix={branch.prefix}
+            suffix={branch.suffix}
+            onChange={(s) => updateBranch(idx, 'styles', s)}
+            onPrefixChange={(v) => updateBranch(idx, 'prefix', v)}
+            onSuffixChange={(v) => updateBranch(idx, 'suffix', v)}
+          />
         </div>
       ))}
 
@@ -633,6 +720,14 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
             size="small"
           />
         </div>
+        <BranchStylePicker
+          styles={rule.defaultStyles}
+          prefix={rule.defaultPrefix}
+          suffix={rule.defaultSuffix}
+          onChange={(s) => onRuleChange({ ...rule, defaultStyles: s })}
+          onPrefixChange={(v) => onRuleChange({ ...rule, defaultPrefix: v })}
+          onSuffixChange={(v) => onRuleChange({ ...rule, defaultSuffix: v })}
+        />
       </div>
 
       <div style={{ marginBottom: 8, padding: 6, backgroundColor: '#f5f5f5', borderRadius: 3, fontSize: 10, fontFamily: 'monospace' }}>
@@ -654,11 +749,26 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
 interface CodeRuleEditorProps {
   value: string;
   onChange: (value: string) => void;
+  codeStyles?: CFStyleOverrides;
+  onCodeStylesChange: (styles: CFStyleOverrides | undefined) => void;
   onSave: () => void;
   onClear: () => void;
 }
 
-const CodeRuleEditor: React.FC<CodeRuleEditorProps> = ({ value, onChange, onSave, onClear }) => {
+const CodeRuleEditor: React.FC<CodeRuleEditorProps> = ({ value, onChange, codeStyles, onCodeStylesChange, onSave, onClear }) => {
+  const [showStyles, setShowStyles] = useState(false);
+  const hasStyles = codeStyles && Object.keys(codeStyles).length > 0;
+
+  const updateStyle = (key: keyof CFStyleOverrides, val: any) => {
+    const updated = { ...(codeStyles || {}) };
+    if (val === undefined || val === '' || val === null || val === false) {
+      delete (updated as any)[key];
+    } else {
+      (updated as any)[key] = val;
+    }
+    onCodeStylesChange(Object.keys(updated).length > 0 ? updated : undefined);
+  };
+
   return (
     <div>
       <Input.TextArea
@@ -670,6 +780,49 @@ const CodeRuleEditor: React.FC<CodeRuleEditorProps> = ({ value, onChange, onSave
       />
       <div style={{ fontSize: 10, color: '#999', marginBottom: 8 }}>
         Variables: field names, cell refs (A1, B2), table.A1, currentPage, totalPages
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <button
+          onClick={() => setShowStyles(!showStyles)}
+          style={{
+            fontSize: 10, padding: '2px 8px', cursor: 'pointer',
+            border: hasStyles ? '1px solid #1890ff' : '1px solid #d9d9d9',
+            backgroundColor: hasStyles ? '#e6f7ff' : '#fff',
+            borderRadius: 3,
+          }}
+        >
+          Style Overrides {hasStyles ? '●' : ''}
+        </button>
+        {showStyles && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 6, marginTop: 4, backgroundColor: '#f9f9f9', borderRadius: 3, fontSize: 10, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              Font: <input type="color" value={codeStyles?.fontColor || '#000000'} onChange={(e) => updateStyle('fontColor', e.target.value)} style={{ width: 24, height: 18, border: 'none', cursor: 'pointer' }} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              BG: <input type="color" value={codeStyles?.backgroundColor || '#ffffff'} onChange={(e) => updateStyle('backgroundColor', e.target.value)} style={{ width: 24, height: 18, border: 'none', cursor: 'pointer' }} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              Size: <input type="number" value={codeStyles?.fontSize ?? ''} onChange={(e) => updateStyle('fontSize', e.target.value ? Number(e.target.value) : undefined)} style={{ width: 40, fontSize: 10, height: 20 }} min={1} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              Align:
+              <select value={codeStyles?.alignment || ''} onChange={(e) => updateStyle('alignment', e.target.value || undefined)} style={{ fontSize: 10, height: 20 }}>
+                <option value="">default</option>
+                <option value="left">left</option>
+                <option value="center">center</option>
+                <option value="right">right</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <input type="checkbox" checked={!!codeStyles?.strikethrough} onChange={(e) => updateStyle('strikethrough', e.target.checked || undefined)} />
+              <span style={{ textDecoration: 'line-through' }}>S</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <input type="checkbox" checked={!!codeStyles?.underline} onChange={(e) => updateStyle('underline', e.target.checked || undefined)} />
+              <span style={{ textDecoration: 'underline' }}>U</span>
+            </label>
+          </div>
+        )}
       </div>
       <Space>
         <Button type="primary" size="small" onClick={onSave}>

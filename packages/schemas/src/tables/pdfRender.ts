@@ -19,28 +19,45 @@ type Pos = { x: number; y: number };
 const rectanglePdfRender = rectangle.pdf;
 const cellPdfRender = cell.pdf;
 
-async function drawCell(arg: PDFRenderProps<TableSchema>, cell: Cell) {
+async function drawCell(arg: PDFRenderProps<TableSchema>, cell: Cell, cfOverrides?: Record<string, any>) {
+  const cellSchema: any = {
+    name: '',
+    type: 'cell',
+    position: { x: cell.x, y: cell.y },
+    width: cell.width,
+    height: cell.height,
+    fontName: cell.styles.fontName,
+    alignment: cell.styles.alignment,
+    verticalAlignment: cell.styles.verticalAlignment,
+    fontSize: cell.styles.fontSize,
+    lineHeight: cell.styles.lineHeight,
+    characterSpacing: cell.styles.characterSpacing,
+    backgroundColor: cell.styles.backgroundColor,
+    fontColor: cell.styles.textColor,
+    borderColor: cell.styles.lineColor,
+    borderWidth: cell.styles.lineWidth,
+    padding: cell.styles.cellPadding,
+  };
+
+  // Apply CF style overrides per cell
+  if (cfOverrides) {
+    if (cfOverrides.fontName !== undefined) cellSchema.fontName = cfOverrides.fontName;
+    if (cfOverrides.alignment !== undefined) cellSchema.alignment = cfOverrides.alignment;
+    if (cfOverrides.verticalAlignment !== undefined) cellSchema.verticalAlignment = cfOverrides.verticalAlignment;
+    if (cfOverrides.fontSize !== undefined) cellSchema.fontSize = cfOverrides.fontSize;
+    if (cfOverrides.lineHeight !== undefined) cellSchema.lineHeight = cfOverrides.lineHeight;
+    if (cfOverrides.characterSpacing !== undefined) cellSchema.characterSpacing = cfOverrides.characterSpacing;
+    if (cfOverrides.backgroundColor !== undefined) cellSchema.backgroundColor = cfOverrides.backgroundColor;
+    if (cfOverrides.fontColor !== undefined) cellSchema.fontColor = cfOverrides.fontColor;
+    if (cfOverrides.borderColor !== undefined) cellSchema.borderColor = cfOverrides.borderColor;
+    if (cfOverrides.strikethrough !== undefined) cellSchema.strikethrough = cfOverrides.strikethrough;
+    if (cfOverrides.underline !== undefined) cellSchema.underline = cfOverrides.underline;
+  }
+
   await cellPdfRender({
     ...arg,
     value: cell.raw,
-    schema: {
-      name: '',
-      type: 'cell',
-      position: { x: cell.x, y: cell.y },
-      width: cell.width,
-      height: cell.height,
-      fontName: cell.styles.fontName,
-      alignment: cell.styles.alignment,
-      verticalAlignment: cell.styles.verticalAlignment,
-      fontSize: cell.styles.fontSize,
-      lineHeight: cell.styles.lineHeight,
-      characterSpacing: cell.styles.characterSpacing,
-      backgroundColor: cell.styles.backgroundColor,
-      fontColor: cell.styles.textColor,
-      borderColor: cell.styles.lineColor,
-      borderWidth: cell.styles.lineWidth,
-      padding: cell.styles.cellPadding,
-    },
+    schema: cellSchema,
   });
 }
 
@@ -50,6 +67,8 @@ async function drawRow(
   row: Row,
   cursor: Pos,
   columns: Column[],
+  cfCellStyles?: Record<string, any>,
+  absoluteRowIndex?: number,
 ) {
   cursor.x = table.settings.margin.left;
   for (const column of columns) {
@@ -62,7 +81,10 @@ async function drawRow(
     cell.x = cursor.x;
     cell.y = cursor.y;
 
-    await drawCell(arg, cell);
+    const cfOverrides = cfCellStyles && absoluteRowIndex !== undefined
+      ? cfCellStyles[`${absoluteRowIndex}:${column.index}`]
+      : undefined;
+    await drawCell(arg, cell, cfOverrides);
 
     cursor.x += column.width;
   }
@@ -108,8 +130,10 @@ async function drawTable(arg: PDFRenderProps<TableSchema>, table: Table): Promis
     }
   }
 
-  for (const row of table.body) {
-    await drawRow(arg, table, row, cursor, table.columns);
+  const cfCellStyles = (arg.schema as any).__cfCellStyles;
+  const startRange = arg.schema.__bodyRange?.start ?? 0;
+  for (let i = 0; i < table.body.length; i++) {
+    await drawRow(arg, table, table.body[i], cursor, table.columns, cfCellStyles, i + startRange);
   }
 
   await drawTableBorder(arg, table, startPos, cursor);

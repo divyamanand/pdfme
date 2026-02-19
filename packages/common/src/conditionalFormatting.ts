@@ -11,6 +11,40 @@ export type ConditionOperator =
   | 'contains' | 'startsWith' | 'endsWith'
   | 'isEmpty' | 'isNotEmpty';
 
+// ============================================================================
+// STYLE OVERRIDES FOR CONDITIONAL FORMATTING
+// ============================================================================
+
+/**
+ * Style overrides applicable per CF branch. All optional — unset = use normal style.
+ * Common subset usable by both table cells and text schemas.
+ */
+export interface CFStyleOverrides {
+  fontName?: string;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
+  verticalAlignment?: 'top' | 'middle' | 'bottom';
+  fontSize?: number;
+  lineHeight?: number;
+  characterSpacing?: number;
+  fontColor?: string;
+  backgroundColor?: string;
+  borderColor?: string;        // tables only
+  strikethrough?: boolean;     // text only
+  underline?: boolean;         // text only
+}
+
+/** Result of evaluating a single CF rule (non-table). */
+export interface CFEvaluationResult {
+  value: string;
+  styles?: CFStyleOverrides;
+}
+
+/** Result of evaluating table CF. cellStyles keys are "row:col". */
+export interface TableCFEvaluationResult {
+  value: string;
+  cellStyles?: Record<string, CFStyleOverrides>;
+}
+
 /**
  * One IF branch: field operator value → result
  * Evaluated left-to-right; first match wins.
@@ -27,6 +61,12 @@ export interface VisualConditionBranch {
   result: string;
   /** If true, result is a variable reference (emitted unquoted); otherwise treated as a quoted string */
   resultIsVariable?: boolean;
+  /** Optional style overrides when this branch matches */
+  styles?: CFStyleOverrides;
+  /** Text to prepend before the result value */
+  prefix?: string;
+  /** Text to append after the result value */
+  suffix?: string;
 }
 
 /**
@@ -37,6 +77,12 @@ export interface VisualRule {
   defaultResult: string;
   /** If true, defaultResult is a variable reference (emitted unquoted) */
   defaultResultIsVariable?: boolean;
+  /** Style overrides for the default (ELSE) branch */
+  defaultStyles?: CFStyleOverrides;
+  /** Prefix for the default result */
+  defaultPrefix?: string;
+  /** Suffix for the default result */
+  defaultSuffix?: string;
 }
 
 /**
@@ -55,6 +101,8 @@ export interface ConditionalRule {
   sourceRow?: number;
   /** For wildcard rules: the col the rule was authored on (used to shift cell refs at eval time) */
   sourceCol?: number;
+  /** Style overrides for code mode (applied when expression evaluates to non-null) */
+  codeStyles?: CFStyleOverrides;
 }
 
 /** @deprecated Use ConditionalRule instead */
@@ -279,7 +327,7 @@ export function compileVisualRulesToExpression(rule: VisualRule): string {
 /**
  * Helper: compile a single VisualConditionBranch's condition to JS.
  */
-function compileCondition(branch: VisualConditionBranch): string {
+export function compileCondition(branch: VisualConditionBranch): string {
   const field = branch.field;
 
   // Emit value: raw if variable, raw if numeric, quoted otherwise

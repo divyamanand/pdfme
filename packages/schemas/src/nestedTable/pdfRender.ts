@@ -157,33 +157,54 @@ export const pdfRender = async (arg: PDFRenderProps<NestedTableSchema>) => {
   const table = await createSingleTable(typedBody, createTableArgs);
 
   // Render body cells
+  const cfCellStyles = (schema as any).__cfCellStyles;
+  const startRange = schema.__bodyRange?.start ?? 0;
   let rowY = syntheticTableSchema.position.y;
-  for (const row of table.body) {
+  for (let rowIdx = 0; rowIdx < table.body.length; rowIdx++) {
+    const row = table.body[rowIdx];
     let colX = syntheticTableSchema.position.x;
     for (const column of table.columns) {
       const bodyCell = row.cells[column.index];
       if (bodyCell) {
+        const cellSchema: any = {
+          name: '',
+          type: 'cell',
+          position: { x: colX, y: rowY },
+          width: column.width,
+          height: row.height,
+          fontName: bodyCell.styles.fontName,
+          alignment: bodyCell.styles.alignment,
+          verticalAlignment: bodyCell.styles.verticalAlignment,
+          fontSize: bodyCell.styles.fontSize,
+          lineHeight: bodyCell.styles.lineHeight,
+          characterSpacing: bodyCell.styles.characterSpacing,
+          backgroundColor: bodyCell.styles.backgroundColor,
+          fontColor: bodyCell.styles.textColor,
+          borderColor: bodyCell.styles.lineColor,
+          borderWidth: bodyCell.styles.lineWidth,
+          padding: bodyCell.styles.cellPadding,
+        };
+
+        // Apply CF cell style overrides
+        const cfOverrides = cfCellStyles?.[`${rowIdx + startRange}:${column.index}`];
+        if (cfOverrides) {
+          if (cfOverrides.fontName !== undefined) cellSchema.fontName = cfOverrides.fontName;
+          if (cfOverrides.alignment !== undefined) cellSchema.alignment = cfOverrides.alignment;
+          if (cfOverrides.verticalAlignment !== undefined) cellSchema.verticalAlignment = cfOverrides.verticalAlignment;
+          if (cfOverrides.fontSize !== undefined) cellSchema.fontSize = cfOverrides.fontSize;
+          if (cfOverrides.lineHeight !== undefined) cellSchema.lineHeight = cfOverrides.lineHeight;
+          if (cfOverrides.characterSpacing !== undefined) cellSchema.characterSpacing = cfOverrides.characterSpacing;
+          if (cfOverrides.backgroundColor !== undefined) cellSchema.backgroundColor = cfOverrides.backgroundColor;
+          if (cfOverrides.fontColor !== undefined) cellSchema.fontColor = cfOverrides.fontColor;
+          if (cfOverrides.borderColor !== undefined) cellSchema.borderColor = cfOverrides.borderColor;
+          if (cfOverrides.strikethrough !== undefined) cellSchema.strikethrough = cfOverrides.strikethrough;
+          if (cfOverrides.underline !== undefined) cellSchema.underline = cfOverrides.underline;
+        }
+
         await cellPdfRender({
           ...arg,
           value: bodyCell.raw,
-          schema: {
-            name: '',
-            type: 'cell',
-            position: { x: colX, y: rowY },
-            width: column.width,
-            height: row.height,
-            fontName: bodyCell.styles.fontName,
-            alignment: bodyCell.styles.alignment,
-            verticalAlignment: bodyCell.styles.verticalAlignment,
-            fontSize: bodyCell.styles.fontSize,
-            lineHeight: bodyCell.styles.lineHeight,
-            characterSpacing: bodyCell.styles.characterSpacing,
-            backgroundColor: bodyCell.styles.backgroundColor,
-            fontColor: bodyCell.styles.textColor,
-            borderColor: bodyCell.styles.lineColor,
-            borderWidth: bodyCell.styles.lineWidth,
-            padding: bodyCell.styles.cellPadding,
-          },
+          schema: cellSchema,
         });
       }
       colX += column.width;

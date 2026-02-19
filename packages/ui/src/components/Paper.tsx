@@ -10,6 +10,7 @@ const Paper = (props: {
   schemasList: SchemaForUI[][];
   pageSizes: Size[];
   backgrounds: string[];
+  pageBackgroundColors?: (string | undefined)[];
   renderPaper: (arg: { index: number; paperSize: Size }) => ReactNode;
   renderSchema: (arg: { index: number; schema: SchemaForUI }) => ReactNode;
   hasRulers?: boolean;
@@ -21,6 +22,7 @@ const Paper = (props: {
     schemasList,
     pageSizes,
     backgrounds,
+    pageBackgroundColors,
     renderPaper,
     renderSchema,
     hasRulers,
@@ -88,6 +90,7 @@ const Paper = (props: {
               top: `${pageTop}px`,
               left: leftCenteringIndent,
               position: 'relative',
+              backgroundColor: pageBackgroundColors?.[paperIndex] || 'white',
               backgroundImage: `url(${background})`,
               backgroundSize: `${paperSize.width}px ${paperSize.height}px`,
               ...paperSize,

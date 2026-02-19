@@ -111,6 +111,7 @@ type CtlBarProps = {
   addPageAfter?: () => void;
   clonePageAfter?: () => void;
   removePage?: () => void;
+  pageSettings?: () => void;
   onCFClick?: () => void;
   hasCFEligible?: boolean;
 };
@@ -129,6 +130,7 @@ const CtlBar = (props: CtlBarProps) => {
     addPageAfter,
     clonePageAfter,
     removePage,
+    pageSettings,
     onCFClick,
     hasCFEligible,
   } = props;
@@ -150,6 +152,12 @@ const CtlBar = (props: CtlBarProps) => {
     contextMenuItems.push({
       key: '2',
       label: <div onClick={removePage}>{i18n('removePage')}</div>,
+    });
+  }
+  if (pageSettings) {
+    contextMenuItems.push({
+      key: '4',
+      label: <div onClick={pageSettings}>{i18n('pageSettings')}</div>,
     });
   }
 

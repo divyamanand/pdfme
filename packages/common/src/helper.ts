@@ -151,6 +151,24 @@ export const getB64BasePdf = async (
 export const isBlankPdf = (basePdf: BasePdf): basePdf is BlankPdf =>
   BlankPdfSchema.safeParse(basePdf).success;
 
+/**
+ * Get the padding for a specific page, falling back to the global BlankPdf padding.
+ */
+export const getPagePadding = (
+  basePdf: BlankPdf,
+  pageIndex: number,
+): [number, number, number, number] =>
+  basePdf.pageSettings?.[pageIndex]?.padding ?? basePdf.padding;
+
+/**
+ * Get the background color for a specific page, or undefined if not set.
+ */
+export const getPageBackgroundColor = (
+  basePdf: BlankPdf,
+  pageIndex: number,
+): string | undefined =>
+  basePdf.pageSettings?.[pageIndex]?.backgroundColor;
+
 const getByteString = (base64: string) => Buffer.from(base64, 'base64').toString('binary');
 
 export const b64toUint8Array = (base64: string) => {

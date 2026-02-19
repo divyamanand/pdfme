@@ -1,13 +1,22 @@
 import * as acorn from 'acorn';
 import type { Node as AcornNode, Identifier, Property } from 'estree';
 import type { SchemaPageArray } from './types.js';
-import type { TableConditionalFormatting, ConditionalRule } from './conditionalFormatting.js';
+import type { TableConditionalFormatting, ConditionalRule, VisualRule, CFStyleOverrides, CFEvaluationResult, TableCFEvaluationResult } from './conditionalFormatting.js';
 import {
   buildCellAddressMap,
   resolveRulesForCell,
+  compileCondition,
 } from './conditionalFormatting.js';
 
 const expressionCache = new Map<string, (context: Record<string, unknown>) => unknown>();
+
+/** Safely convert an evaluated value to a display string.
+ *  Objects/arrays are JSON-stringified; primitives use String(). */
+const stringifyValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+};
 const parseDataCache = new Map<string, Record<string, unknown>>();
 
 const parseData = (data: Record<string, unknown>): Record<string, unknown> => {
@@ -381,6 +390,22 @@ const evaluatePlaceholders = (arg: {
       break;
     }
 
+    // Skip double-brace {{ sequences — leave them for evaluateExpressions
+    if (startIndex + 1 < content.length && content[startIndex + 1] === '{') {
+      // Find matching }} by counting braces
+      let depth = 2;
+      let scan = startIndex + 2;
+      while (scan < content.length && depth > 0) {
+        if (content[scan] === '{') depth++;
+        else if (content[scan] === '}') depth--;
+        scan++;
+      }
+      // Pass through the entire {{...}} block unchanged
+      resultContent += content.slice(index, scan);
+      index = scan;
+      continue;
+    }
+
     resultContent += content.slice(index, startIndex);
     let braceCount = 1;
     let endIndex = startIndex + 1;
@@ -401,7 +426,7 @@ const evaluatePlaceholders = (arg: {
         const evalFunc = expressionCache.get(code)!;
         try {
           const value = evalFunc(context);
-          resultContent += String(value);
+          resultContent += stringifyValue(value);
         } catch {
           resultContent += content.slice(startIndex, endIndex);
         }
@@ -412,7 +437,7 @@ const evaluatePlaceholders = (arg: {
           const evalFunc = (ctx: Record<string, unknown>) => evaluateAST(ast, ctx);
           expressionCache.set(code, evalFunc);
           const value = evalFunc(context);
-          resultContent += String(value);
+          resultContent += stringifyValue(value);
         } catch {
           resultContent += content.slice(startIndex, endIndex);
         }
@@ -589,7 +614,7 @@ export const evaluateExpressions = (arg: {
         const evalFunc = expressionCache.get(code)!;
         try {
           const value = evalFunc(context);
-          resultContent += String(value !== null && value !== undefined ? value : '');
+          resultContent += stringifyValue(value);
         } catch {
           // On error, keep the raw expression block
           resultContent += content.slice(startIndex, endIndex);
@@ -601,7 +626,7 @@ export const evaluateExpressions = (arg: {
           const evalFunc = (ctx: Record<string, unknown>) => evaluateAST(ast, ctx);
           expressionCache.set(code, evalFunc);
           const value = evalFunc(context);
-          resultContent += String(value !== null && value !== undefined ? value : '');
+          resultContent += stringifyValue(value);
         } catch {
           // On error, keep the raw expression block
           resultContent += content.slice(startIndex, endIndex);
@@ -626,20 +651,54 @@ export const evaluateExpressions = (arg: {
  * If conditionalFormatting rules are provided, a matching rule replaces the entire cell value.
  * Otherwise, existing inline {{...}} evaluation proceeds unchanged (backward compatible).
  */
+/**
+ * Evaluate a VisualRule by checking branches individually.
+ * Returns the matched branch's value (with prefix/suffix) and styles.
+ * This is needed instead of using the compiled ternary so we can identify
+ * WHICH branch matched and pick up that branch's styles/prefix/suffix.
+ */
+const evaluateVisualRule = (
+  rule: VisualRule,
+  context: Record<string, unknown>,
+): CFEvaluationResult => {
+  for (const branch of rule.branches) {
+    const condExpr = compileCondition(branch);
+    try {
+      if (evaluateCompiledExpression(condExpr, context)) {
+        const valueExpr = branch.resultIsVariable
+          ? branch.result
+          : JSON.stringify(branch.result);
+        const rawValue = String(evaluateCompiledExpression(valueExpr, context) ?? '');
+        const value = (branch.prefix || '') + rawValue + (branch.suffix || '');
+        return { value, styles: branch.styles };
+      }
+    } catch {
+      continue;
+    }
+  }
+  // No branch matched, use default (ELSE)
+  const defExpr = rule.defaultResultIsVariable
+    ? rule.defaultResult
+    : JSON.stringify(rule.defaultResult);
+  const rawValue = String(evaluateCompiledExpression(defExpr, context) ?? '');
+  const value = (rule.defaultPrefix || '') + rawValue + (rule.defaultSuffix || '');
+  return { value, styles: rule.defaultStyles };
+};
+
 export const evaluateTableCellExpressions = (arg: {
   value: string;
   variables: Record<string, unknown>;
   schemas: SchemaPageArray;
   conditionalFormatting?: TableConditionalFormatting;
-}): string => {
+}): TableCFEvaluationResult => {
   const { value, variables, schemas, conditionalFormatting } = arg;
 
   // Fast exit: no expressions and no conditional formatting
   if (!value || typeof value !== 'string') {
-    return value;
+    return { value };
   }
   if (!value.includes('{{') && !conditionalFormatting) {
-    return value;
+    return { value };
   }
 
   try {
@@ -648,6 +707,8 @@ export const evaluateTableCellExpressions = (arg: {
     // Build cell address map from raw values (for cross-cell references like A1, B2)
     const cellAddressMap = buildCellAddressMap(rows);
     const augmentedVariables = { ...variables, ...cellAddressMap };
+
+    const cellStyles: Record<string, CFStyleOverrides> = {};
 
     const evaluatedRows = rows.map((row, rowIndex) =>
       row.map((cell, colIndex) => {
@@ -664,7 +725,16 @@ export const evaluateTableCellExpressions = (arg: {
           // CF replaces entire cell value
           try {
             const evalContext = buildEvalContext(augmentedVariables, schemas);
+
+            if (rule.mode === 'visual' && rule.visualRule) {
+              const result = evaluateVisualRule(rule.visualRule, evalContext);
+              if (result.styles) cellStyles[`${rowIndex}:${colIndex}`] = result.styles;
+              return result.value;
+            }
+
+            // Code mode
             const result = evaluateCompiledExpression(rule.compiledExpression, evalContext);
+            if (rule.codeStyles) cellStyles[`${rowIndex}:${colIndex}`] = rule.codeStyles;
             return String(result ?? '');
           } catch {
             return cell; // fail-safe: keep original cell value
@@ -680,26 +750,35 @@ export const evaluateTableCellExpressions = (arg: {
       }),
     );
 
-    return JSON.stringify(evaluatedRows);
+    return {
+      value: JSON.stringify(evaluatedRows),
+      cellStyles: Object.keys(cellStyles).length > 0 ? cellStyles : undefined,
+    };
   } catch {
     // Not valid JSON or parse error, return as-is
-    return value;
+    return { value };
   }
 };
 
 /**
  * Evaluates a conditional formatting rule for a non-table schema.
- * Returns the evaluated result string, or null if evaluation fails.
+ * Returns the evaluated result with optional style overrides, or null if evaluation fails.
  */
 export const evaluateSchemaConditionalFormatting = (arg: {
   rule: ConditionalRule;
   variables: Record<string, unknown>;
   schemas: SchemaPageArray;
-}): string | null => {
+}): CFEvaluationResult | null => {
   try {
     const context = buildEvalContext(arg.variables, arg.schemas);
+
+    if (arg.rule.mode === 'visual' && arg.rule.visualRule) {
+      return evaluateVisualRule(arg.rule.visualRule, context);
+    }
+
+    // Code mode
     const result = evaluateCompiledExpression(arg.rule.compiledExpression, context);
-    return String(result ?? '');
+    return { value: String(result ?? ''), styles: arg.rule.codeStyles };
   } catch {
     return null;
   }

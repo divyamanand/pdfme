@@ -343,15 +343,35 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
         value: bodyCell.raw,
         placeholder: '',
         rootElement: div,
-        schema: {
-          name: '',
-          type: 'cell',
-          content: bodyCell.raw,
-          position: { x: colOffsetX, y: rowOffsetY },
-          width: bodyCell.width,
-          height: bodyCell.height,
-          ...convertToCellStyle(bodyCell.styles),
-        },
+        schema: (() => {
+          const baseSchema: any = {
+            name: '',
+            type: 'cell',
+            content: bodyCell.raw,
+            position: { x: colOffsetX, y: rowOffsetY },
+            width: bodyCell.width,
+            height: bodyCell.height,
+            ...convertToCellStyle(bodyCell.styles),
+          };
+          // Apply CF cell style overrides
+          const cfCellStyles = (schema as any).__cfCellStyles;
+          const startRange = schema.__bodyRange?.start ?? 0;
+          const cfOverrides = cfCellStyles?.[`${rowIndex + startRange}:${colIndex}`];
+          if (cfOverrides) {
+            if (cfOverrides.fontName !== undefined) baseSchema.fontName = cfOverrides.fontName;
+            if (cfOverrides.alignment !== undefined) baseSchema.alignment = cfOverrides.alignment;
+            if (cfOverrides.verticalAlignment !== undefined) baseSchema.verticalAlignment = cfOverrides.verticalAlignment;
+            if (cfOverrides.fontSize !== undefined) baseSchema.fontSize = cfOverrides.fontSize;
+            if (cfOverrides.lineHeight !== undefined) baseSchema.lineHeight = cfOverrides.lineHeight;
+            if (cfOverrides.characterSpacing !== undefined) baseSchema.characterSpacing = cfOverrides.characterSpacing;
+            if (cfOverrides.backgroundColor !== undefined) baseSchema.backgroundColor = cfOverrides.backgroundColor;
+            if (cfOverrides.fontColor !== undefined) baseSchema.fontColor = cfOverrides.fontColor;
+            if (cfOverrides.borderColor !== undefined) baseSchema.borderColor = cfOverrides.borderColor;
+            if (cfOverrides.strikethrough !== undefined) baseSchema.strikethrough = cfOverrides.strikethrough;
+            if (cfOverrides.underline !== undefined) baseSchema.underline = cfOverrides.underline;
+          }
+          return baseSchema;
+        })(),
       });
       colOffsetX += bodyCell.width;
     });

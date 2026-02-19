@@ -4,6 +4,7 @@ import {
   checkGenerateProps,
   getDynamicTemplate,
   isBlankPdf,
+  getPageBackgroundColor,
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
@@ -108,6 +109,24 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
 
       const page = insertPage({ basePage, embedPdfBox, pdfDoc });
 
+      // Draw per-page background color if configured
+      if (isBlankPdf(basePdf)) {
+        const bgColor = getPageBackgroundColor(basePdf, j);
+        if (bgColor && bgColor.startsWith('#') && bgColor.length >= 7) {
+          const r = parseInt(bgColor.slice(1, 3), 16) / 255;
+          const g = parseInt(bgColor.slice(3, 5), 16) / 255;
+          const b = parseInt(bgColor.slice(5, 7), 16) / 255;
+          const { width: pw, height: ph } = page.getSize();
+          page.drawRectangle({
+            x: 0,
+            y: 0,
+            width: pw,
+            height: ph,
+            color: pdfLib.rgb(r, g, b),
+          });
+        }
+      }
+
       // Build table cell context so other plugins can reference table cells as fieldName.A1
       const tableCellContext = buildTableCellContext(schemas as any, input);
 
@@ -125,8 +144,9 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
             value = replacePlaceholders({
               content: staticSchema.content || '',
               variables: varsContext,
-              schemas: schemas, // Use the properly typed schemas variable
+              schemas: schemas,
             });
+            value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemas });
           } else if (
             rawInput == null &&
             Array.isArray((staticSchema as any).variables) &&
@@ -149,12 +169,16 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           if (!staticSchema.readOnly && value) {
             if (staticSchema.type === 'table' || staticSchema.type === 'nestedTable') {
               const tableSchema = staticSchema as any;
-              value = evaluateTableCellExpressions({
+              const tableCFResult = evaluateTableCellExpressions({
                 value,
                 variables: varsContext,
                 schemas,
                 conditionalFormatting: tableSchema.conditionalFormatting,
               });
+              value = tableCFResult.value;
+              if (tableCFResult.cellStyles) {
+                (staticSchema as any).__cfCellStyles = tableCFResult.cellStyles;
+              }
             } else if (staticSchema.type !== 'image' && staticSchema.type !== 'signature') {
               const schemaCF = (staticSchema as any).conditionalFormatting;
               if (schemaCF) {
@@ -163,8 +187,14 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
                   variables: varsContext,
                   schemas,
                 });
-                if (cfResult !== null) value = cfResult;
-                else value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+                if (cfResult !== null) {
+                  value = cfResult.value;
+                  if (cfResult.styles) {
+                    (staticSchema as any).__cfStyles = cfResult.styles;
+                  }
+                } else {
+                  value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+                }
               } else {
                 value = evaluateExpressions({ content: value, variables: varsContext, schemas });
               }
@@ -210,8 +240,9 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           value = replacePlaceholders({
             content: schema.content || '',
             variables: varsContext,
-            schemas: schemas, // Use the properly typed schemas variable
+            schemas: schemas,
           });
+          value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemas });
         } else if (
           rawInput == null &&
           Array.isArray((schema as any).variables) &&
@@ -235,12 +266,16 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         if (!schema.readOnly && value) {
           if (schema.type === 'table' || schema.type === 'nestedTable') {
             const tableSchema = schema as any;
-            value = evaluateTableCellExpressions({
+            const tableCFResult = evaluateTableCellExpressions({
               value,
               variables: varsContext,
               schemas,
               conditionalFormatting: tableSchema.conditionalFormatting,
             });
+            value = tableCFResult.value;
+            if (tableCFResult.cellStyles) {
+              (schema as any).__cfCellStyles = tableCFResult.cellStyles;
+            }
           } else if (schema.type !== 'image' && schema.type !== 'signature') {
             const schemaCF = (schema as any).conditionalFormatting;
             if (schemaCF) {
@@ -249,8 +284,14 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
                 variables: varsContext,
                 schemas,
               });
-              if (cfResult !== null) value = cfResult;
-              else value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+              if (cfResult !== null) {
+                value = cfResult.value;
+                if (cfResult.styles) {
+                  (schema as any).__cfStyles = cfResult.styles;
+                }
+              } else {
+                value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+              }
             } else {
               value = evaluateExpressions({ content: value, variables: varsContext, schemas });
             }

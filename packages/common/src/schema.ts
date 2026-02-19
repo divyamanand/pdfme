@@ -34,6 +34,7 @@ export const Dict = z.object({
   clonePage: z.string(),
   removePage: z.string(),
   removePageConfirm: z.string(),
+  pageSettings: z.string(),
   // --------------------validation-------------------
   'validation.uniqueName': z.string(),
   'validation.hexColor': z.string(),
@@ -124,11 +125,17 @@ const Uint8ArraySchema: z.ZodSchema<Uint8Array<ArrayBuffer>> = z
   .any()
   .refine((v) => v instanceof Uint8Array && v.buffer instanceof ArrayBuffer);
 
+export const PageSettings = z.object({
+  padding: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+  backgroundColor: z.string().optional(),
+});
+
 export const BlankPdf = z.object({
   width: z.number(),
   height: z.number(),
   padding: z.tuple([z.number(), z.number(), z.number(), z.number()]),
   staticSchema: z.array(Schema).optional(),
+  pageSettings: z.array(PageSettings).optional(),
 });
 
 export const CustomPdf = z.union([z.string(), ArrayBufferSchema, Uint8ArraySchema]);

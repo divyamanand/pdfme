@@ -213,8 +213,8 @@ describe('replacePlaceholders - Security Tests', () => {
   it('should prevent prototype pollution via JSON.parse', () => {
     const content = 'Polluted: {JSON.parse(\'{"__proto__":{"polluted":true}}\').polluted}';
     const result = replacePlaceholders({ content, variables: {}, schemas: [] });
-    // Even if 'polluted' is accessed, the prototype is not polluted, so undefined is returned.
-    expect(result).toBe('Polluted: undefined');
+    // Even if 'polluted' is accessed, the prototype is not polluted, so undefined/empty is returned.
+    expect(result).toBe('Polluted: ');
   });
 
   it('should prevent accessing nested prohibited properties in functions', () => {
@@ -439,17 +439,17 @@ describe('replacePlaceholders - XSS Vulnerability Prevention Tests', () => {
     // Test Object.keys
     const keysContent = '{ Object.keys({ a: 1, b: 2 }) }';
     const keysResult = replacePlaceholders({ content: keysContent, variables: {}, schemas: [] });
-    expect(keysResult).toBe('a,b');
+    expect(keysResult).toBe('["a","b"]');
 
     // Test Object.values
     const valuesContent = '{ Object.values({ a: 1, b: 2 }) }';
     const valuesResult = replacePlaceholders({ content: valuesContent, variables: {}, schemas: [] });
-    expect(valuesResult).toBe('1,2');
+    expect(valuesResult).toBe('[1,2]');
 
     // Test Object.entries
     const entriesContent = '{ Object.entries({ a: 1 })[0] }';
     const entriesResult = replacePlaceholders({ content: entriesContent, variables: {}, schemas: [] });
-    expect(entriesResult).toBe('a,1');
+    expect(entriesResult).toBe('["a",1]');
 
     // Test safe Object.assign
     const assignContent = '{ Object.assign({}, { a: 1 }, { b: 2 }).a }';
@@ -507,21 +507,21 @@ describe('replacePlaceholders - XSS Vulnerability Prevention Tests', () => {
   it('should allow safe Object.assign but prevent prototype pollution', () => {
     const content = '{ Object.assign({}, { a: 1 }) }';
     const result = replacePlaceholders({ content, variables: {}, schemas: [] });
-    // Safe assign should work
-    expect(result).toBe('[object Object]');
+    // Safe assign should work — objects are now JSON-stringified
+    expect(result).toBe('{"a":1}');
   });
 
   it('should prevent prototype pollution via Object.assign', () => {
     const pollutionContent = '{ Object.assign({}, { "__proto__": { polluted: "yes" } }) }';
     const result = replacePlaceholders({ content: pollutionContent, variables: {}, schemas: [] });
-    // Should execute but not pollute prototype
-    expect(result).toBe('[object Object]');
+    // Should execute but not pollute prototype — objects are now JSON-stringified
+    expect(result).toBe('{}');
     expect(({} as any).polluted).toBeUndefined();
-    
+
     // Test with constructor
     const constructorContent = '{ Object.assign({}, { "constructor": { polluted: "yes" } }) }';
     const result2 = replacePlaceholders({ content: constructorContent, variables: {}, schemas: [] });
-    expect(result2).toBe('[object Object]');
+    expect(result2).toBe('{}');
     expect(({} as any).constructor.polluted).toBeUndefined();
   });
 
@@ -633,43 +633,43 @@ describe('evaluateTableCellExpressions', () => {
     const value = '[["{{qty * price}}", "{{qty + 5}}"]]';
     const variables = { qty: 3, price: 10 };
     const result = evaluateTableCellExpressions({ value, variables, schemas: [] });
-    expect(JSON.parse(result)).toEqual([['30', '8']]);
+    expect(JSON.parse(result.value)).toEqual([['30', '8']]);
   });
 
   it('should handle multiple rows with expressions', () => {
     const value = '[["{{2 + 2}}", "{{3 + 3}}"], ["{{4 + 4}}", "{{5 + 5}}"]]';
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
-    expect(JSON.parse(result)).toEqual([['4', '6'], ['8', '10']]);
+    expect(JSON.parse(result.value)).toEqual([['4', '6'], ['8', '10']]);
   });
 
   it('should return value as-is if not valid JSON', () => {
     const value = 'not valid json';
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
-    expect(result).toBe(value);
+    expect(result.value).toBe(value);
   });
 
   it('should handle cells without expressions', () => {
     const value = '[["plain", "text"], ["no", "expressions"]]';
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
-    expect(JSON.parse(result)).toEqual([['plain', 'text'], ['no', 'expressions']]);
+    expect(JSON.parse(result.value)).toEqual([['plain', 'text'], ['no', 'expressions']]);
   });
 
   it('should fast exit if no {{ in value', () => {
     const value = '[["a", "b"], ["c", "d"]]';
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
-    expect(result).toBe(value);
+    expect(result.value).toBe(value);
   });
 
   it('should handle mixed cells with and without expressions', () => {
     const value = '[["{{2 + 2}}", "plain text"], ["another {{3 + 3}}", "no expr"]]';
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
-    expect(JSON.parse(result)).toEqual([['4', 'plain text'], ['another 6', 'no expr']]);
+    expect(JSON.parse(result.value)).toEqual([['4', 'plain text'], ['another 6', 'no expr']]);
   });
 
   it('should handle non-string cell values', () => {
     const value = '[[1, 2], [true, false]]';
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
-    expect(JSON.parse(result)).toEqual([[1, 2], [true, false]]);
+    expect(JSON.parse(result.value)).toEqual([[1, 2], [true, false]]);
   });
 
   it('should evaluate conditionalFormatting rule replacing entire cell', () => {
@@ -686,7 +686,7 @@ describe('evaluateTableCellExpressions', () => {
         },
       },
     });
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.value);
     // CF replaces entire cell value
     expect(parsed[0][0]).toBe('High');
   });
@@ -699,7 +699,7 @@ describe('evaluateTableCellExpressions', () => {
       schemas: [],
       conditionalFormatting: {},
     });
-    expect(JSON.parse(result)).toEqual([['4', '6']]);
+    expect(JSON.parse(result.value)).toEqual([['4', '6']]);
   });
 
   it('should resolve cross-cell references (A1, B1) in expression context', () => {
@@ -709,7 +709,7 @@ describe('evaluateTableCellExpressions', () => {
       variables: {},
       schemas: [],
     });
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.value);
     // A1=100, B1=200, so A1 > B1 is false → "no"
     expect(parsed[0][2]).toBe('no');
   });

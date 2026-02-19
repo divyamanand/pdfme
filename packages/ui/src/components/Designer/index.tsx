@@ -9,10 +9,12 @@ import {
   DesignerProps,
   Size,
   isBlankPdf,
+  getPagePadding,
+  getPageBackgroundColor,
   px2mm,
 } from '@pdfme/common';
 import { DndContext } from '@dnd-kit/core';
-import { Modal, InputNumber } from 'antd';
+import { Modal, InputNumber, ColorPicker, Button } from 'antd';
 import RightSidebar from './RightSidebar/index.js';
 import LeftSidebar from './LeftSidebar.js';
 import Canvas from './Canvas/index.js';
@@ -186,7 +188,7 @@ const TemplateEditor = ({
 
   const addSchema = (defaultSchema: Schema) => {
     const [paddingTop, paddingRight, paddingBottom, paddingLeft] = isBlankPdf(template.basePdf)
-      ? template.basePdf.padding
+      ? getPagePadding(template.basePdf, pageCursor)
       : [0, 0, 0, 0];
     const pageSize = pageSizes[pageCursor];
 
@@ -270,6 +272,12 @@ const TemplateEditor = ({
       onOk: () => {
         const _schemasList = cloneDeep(schemasList);
         _schemasList.splice(pageCursor, 1);
+        // Remove per-page settings entry
+        if (isBlankPdf(template.basePdf) && template.basePdf.pageSettings) {
+          const settings = [...template.basePdf.pageSettings];
+          settings.splice(pageCursor, 1);
+          template.basePdf.pageSettings = settings;
+        }
         void updatePage(_schemasList, pageCursor - 1);
       },
     });
@@ -278,6 +286,12 @@ const TemplateEditor = ({
   const handleAddPageAfter = () => {
     const _schemasList = cloneDeep(schemasList);
     _schemasList.splice(pageCursor + 1, 0, []);
+    // Insert empty per-page settings entry (inherits global defaults)
+    if (isBlankPdf(template.basePdf) && template.basePdf.pageSettings) {
+      const settings = [...template.basePdf.pageSettings];
+      settings.splice(pageCursor + 1, 0, {});
+      template.basePdf.pageSettings = settings;
+    }
     void updatePage(_schemasList, pageCursor + 1);
   };
 
@@ -319,7 +333,127 @@ const TemplateEditor = ({
         });
 
         _schemasList.splice(pageCursor + 1, 0, ...clones);
+        // Clone per-page settings for each cloned page
+        if (isBlankPdf(template.basePdf) && template.basePdf.pageSettings) {
+          const settings = [...template.basePdf.pageSettings];
+          const sourceSettings = settings[pageCursor];
+          for (let ci = 0; ci < cloneCount; ci++) {
+            settings.splice(pageCursor + 1 + ci, 0, sourceSettings ? cloneDeep(sourceSettings) : {});
+          }
+          template.basePdf.pageSettings = settings;
+        }
         void updatePage(_schemasList, pageCursor + 1);
+      },
+    });
+  };
+
+  const handlePageSettings = () => {
+    if (!isBlankPdf(template.basePdf)) return;
+    const basePdf = template.basePdf;
+    // Initialize pageSettings array if it doesn't exist
+    if (!basePdf.pageSettings) {
+      basePdf.pageSettings = Array.from({ length: schemasList.length }, () => ({}));
+    }
+    // Ensure array is large enough
+    while (basePdf.pageSettings.length < schemasList.length) {
+      basePdf.pageSettings.push({});
+    }
+    const currentSettings = basePdf.pageSettings[pageCursor] || {};
+    const currentPadding = getPagePadding(basePdf, pageCursor);
+    const currentBgColor = getPageBackgroundColor(basePdf, pageCursor) || '';
+
+    let newPadding: [number, number, number, number] = [...currentPadding];
+    let newBgColor = currentBgColor;
+
+    Modal.confirm({
+      title: `${i18n('pageSettings')} — Page ${pageCursor + 1}`,
+      icon: null,
+      width: 400,
+      content: (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ marginBottom: 12 }}>
+            <strong>Padding (mm)</strong>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <div>
+                <label style={{ fontSize: 12 }}>Top</label>
+                <InputNumber
+                  size="small"
+                  style={{ width: '100%' }}
+                  min={0}
+                  defaultValue={currentPadding[0]}
+                  onChange={(v) => { newPadding[0] = v ?? 0; }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12 }}>Right</label>
+                <InputNumber
+                  size="small"
+                  style={{ width: '100%' }}
+                  min={0}
+                  defaultValue={currentPadding[1]}
+                  onChange={(v) => { newPadding[1] = v ?? 0; }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12 }}>Bottom</label>
+                <InputNumber
+                  size="small"
+                  style={{ width: '100%' }}
+                  min={0}
+                  defaultValue={currentPadding[2]}
+                  onChange={(v) => { newPadding[2] = v ?? 0; }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12 }}>Left</label>
+                <InputNumber
+                  size="small"
+                  style={{ width: '100%' }}
+                  min={0}
+                  defaultValue={currentPadding[3]}
+                  onChange={(v) => { newPadding[3] = v ?? 0; }}
+                />
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <strong>Background Color</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <ColorPicker
+                value={currentBgColor || '#ffffff'}
+                onChange={(color) => { newBgColor = typeof color === 'string' ? color : color.toHexString(); }}
+                showText
+              />
+              <Button
+                size="small"
+                onClick={() => { newBgColor = ''; }}
+              >Clear</Button>
+            </div>
+          </div>
+        </div>
+      ),
+      okText: i18n('set'),
+      cancelText: i18n('cancel'),
+      onOk: () => {
+        if (!basePdf.pageSettings) return;
+
+        const updatedSettings = { ...(basePdf.pageSettings[pageCursor] || {}) };
+        updatedSettings.padding = newPadding;
+        updatedSettings.backgroundColor = newBgColor || undefined;
+
+        // Clone basePdf with updated pageSettings to ensure React detects the change
+        const newPageSettings = [...basePdf.pageSettings];
+        newPageSettings[pageCursor] = updatedSettings;
+        const newBasePdf = { ...basePdf, pageSettings: newPageSettings };
+
+        // Update the template's basePdf reference
+        template.basePdf = newBasePdf;
+
+        const newTemplate = schemasList2template(schemasList, newBasePdf);
+        // Set prevTemplate to prevent updateTemplate from resetting page cursor
+        setPrevTemplate(newTemplate);
+        onChangeTemplate(newTemplate);
+        void refresh(newTemplate);
       },
     });
   };
@@ -340,7 +474,7 @@ const TemplateEditor = ({
     return <ErrorScreen size={size} error={error} />;
   }
   const pageManipulation = isBlankPdf(template.basePdf)
-    ? { addPageAfter: handleAddPageAfter, clonePageAfter: handleClonePageAfter, removePage: handleRemovePage }
+    ? { addPageAfter: handleAddPageAfter, clonePageAfter: handleClonePageAfter, removePage: handleRemovePage, pageSettings: handlePageSettings }
     : {};
 
   return (

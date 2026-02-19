@@ -8,7 +8,7 @@ import type {
   PropPanelSchema,
   Schema,
 } from '@pdfme/common';
-import { isBlankPdf } from '@pdfme/common';
+import { isBlankPdf, getPagePadding } from '@pdfme/common';
 import type { SidebarProps } from '../../../../types.js';
 import { Menu } from 'lucide-react';
 import { I18nContext, PluginsRegistry, OptionsContext } from '../../../../contexts.js';
