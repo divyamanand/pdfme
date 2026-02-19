@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
-import { Modal, Select, Button, Input, Space, AutoComplete } from 'antd';
+import { Modal, Select, Button, Input, InputNumber, Space, AutoComplete } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import type {
   TableConditionalFormatting,
@@ -9,12 +9,14 @@ import type {
   ChangeSchemas,
   SchemaForUI,
   CFStyleOverrides,
+  CFValueType,
 } from '@pdfme/common';
 import {
   colIndexToLetter,
   compileVisualRulesToExpression,
   shiftRule,
   resolveRulesForCell,
+  resolveValueType,
 } from '@pdfme/common';
 import type { VisualConditionBranch } from '@pdfme/common';
 import { I18nContext } from '../../contexts.js';
@@ -34,6 +36,82 @@ const OPERATORS: { value: ConditionOperator; label: string }[] = [
 ];
 
 const BUILTINS = ['currentDate', 'currentTime', 'currentPage', 'totalPages', 'date', 'dateTime'];
+
+const VALUE_TYPE_OPTIONS: { value: CFValueType; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'number', label: 'Number' },
+  { value: 'variable', label: 'Variable' },
+  { value: 'field', label: 'Field' },
+  { value: 'dateTime', label: 'DateTime' },
+];
+
+const TypeSelector: React.FC<{
+  value: CFValueType;
+  onChange: (type: CFValueType) => void;
+}> = ({ value, onChange }) => (
+  <Select
+    size="small"
+    value={value}
+    onChange={onChange}
+    style={{ width: 88, fontSize: 10 }}
+    options={VALUE_TYPE_OPTIONS}
+  />
+);
+
+const ValueInput: React.FC<{
+  value: string;
+  valueType: CFValueType;
+  onChange: (val: string) => void;
+  autocompleteOptions: { value: string; label: string }[];
+  placeholder?: string;
+  filterOption: (input: string, option?: { value: string; label: string }) => boolean;
+}> = ({ value: val, valueType, onChange, autocompleteOptions, placeholder, filterOption }) => {
+  switch (valueType) {
+    case 'number':
+      return (
+        <InputNumber
+          size="small"
+          value={val !== '' ? Number(val) : undefined}
+          onChange={(n) => onChange(n !== null && n !== undefined ? String(n) : '')}
+          placeholder={placeholder || '0'}
+          style={{ width: 100, fontSize: 11 }}
+        />
+      );
+    case 'variable':
+    case 'field':
+      return (
+        <AutoComplete
+          options={autocompleteOptions}
+          filterOption={filterOption}
+          value={val}
+          onChange={onChange}
+          placeholder={placeholder || (valueType === 'field' ? 'field ref' : 'variable')}
+          style={{ width: 100, fontSize: 11 }}
+          size="small"
+        />
+      );
+    case 'dateTime':
+      return (
+        <Input
+          size="small"
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="YYYY-MM-DD"
+          style={{ width: 110, fontSize: 11 }}
+        />
+      );
+    default: // text
+      return (
+        <Input
+          size="small"
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder || 'text'}
+          style={{ width: 100, fontSize: 11 }}
+        />
+      );
+  }
+};
 
 interface ConditionalFormattingDialogProps {
   open: boolean;
@@ -598,7 +676,10 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
   const addBranch = () => {
     onRuleChange({
       ...rule,
-      branches: [...rule.branches, { field: '', operator: '==', value: '', result: '', valueIsVariable: false, resultIsVariable: false }],
+      branches: [...rule.branches, {
+        field: '', operator: '==', value: '', result: '',
+        valueType: 'text' as CFValueType, resultType: 'text' as CFValueType,
+      }],
     });
   };
 
@@ -616,108 +697,130 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
 
   return (
     <div>
-      {rule.branches.map((branch, idx) => (
-        <div key={idx} style={{ marginBottom: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>{idx === 0 ? 'IF' : 'ELSE IF'}</span>
-            <AutoComplete
-              options={autocompleteOptions}
-              filterOption={filterOption}
-              value={branch.field}
-              onSelect={(val) => updateBranch(idx, 'field', val)}
-              onChange={(val) => updateBranch(idx, 'field', val)}
-              placeholder="field"
-              style={{ width: 100, fontSize: 11 }}
-              size="small"
-            />
-            <select
-              value={branch.operator}
-              onChange={(e) => updateBranch(idx, 'operator', e.target.value as ConditionOperator)}
-              style={{ width: 85, fontSize: 11, height: 24 }}
-            >
-              {OPERATORS.map((op) => (
-                <option key={op.value} value={op.value}>
-                  {op.label}
-                </option>
-              ))}
-            </select>
-            {!['isEmpty', 'isNotEmpty'].includes(branch.operator) && (
+      {rule.branches.map((branch, idx) => {
+        const vType = resolveValueType(branch.value, branch.valueIsVariable, branch.valueType);
+        const rType = resolveValueType(branch.result, branch.resultIsVariable, branch.resultType);
+        return (
+          <div key={idx} style={{ marginBottom: 10, padding: 10, backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d6e4ff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#1890ff' }}>
+                {idx === 0 ? 'IF' : `ELSE IF #${idx + 1}`}
+              </span>
+              <Button
+                type="text"
+                danger
+                size="small"
+                onClick={() => removeBranch(idx)}
+                icon={<DeleteOutlined />}
+              />
+            </div>
+            {/* Condition row */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
               <AutoComplete
                 options={autocompleteOptions}
                 filterOption={filterOption}
-                value={branch.value}
-                onSelect={(val) => {
-                  updateBranch(idx, 'value', val);
-                  updateBranch(idx, 'valueIsVariable', true);
-                }}
-                onChange={(val) => {
-                  updateBranch(idx, 'value', val);
-                  const isKnown = autocompleteOptions.some(opt => opt.value === val);
-                  updateBranch(idx, 'valueIsVariable', isKnown);
-                }}
-                placeholder="value"
+                value={branch.field}
+                onSelect={(val) => updateBranch(idx, 'field', val)}
+                onChange={(val) => updateBranch(idx, 'field', val)}
+                placeholder="field"
                 style={{ width: 100, fontSize: 11 }}
                 size="small"
               />
-            )}
-            <span style={{ fontSize: 10, color: '#999' }}>→</span>
-            <AutoComplete
-              options={autocompleteOptions}
-              filterOption={filterOption}
-              value={branch.result}
-              onSelect={(val) => {
-                updateBranch(idx, 'result', val);
-                updateBranch(idx, 'resultIsVariable', true);
-              }}
-              onChange={(val) => {
-                updateBranch(idx, 'result', val);
-                const isKnown = autocompleteOptions.some(opt => opt.value === val);
-                updateBranch(idx, 'resultIsVariable', isKnown);
-              }}
-              placeholder="result"
-              style={{ width: 100, fontSize: 11 }}
-              size="small"
-            />
-            <Button
-              type="text"
-              danger
-              size="small"
-              onClick={() => removeBranch(idx)}
-              icon={<DeleteOutlined />}
+              <Select
+                size="small"
+                value={branch.operator}
+                onChange={(val) => updateBranch(idx, 'operator', val as ConditionOperator)}
+                style={{ width: 100, fontSize: 11 }}
+                options={OPERATORS}
+              />
+              {!['isEmpty', 'isNotEmpty'].includes(branch.operator) && (
+                <>
+                  <TypeSelector
+                    value={vType}
+                    onChange={(t) => {
+                      updateBranch(idx, 'valueType', t);
+                      updateBranch(idx, 'valueIsVariable', t === 'variable' || t === 'field');
+                    }}
+                  />
+                  <ValueInput
+                    value={branch.value}
+                    valueType={vType}
+                    onChange={(val) => {
+                      updateBranch(idx, 'value', val);
+                      updateBranch(idx, 'valueIsVariable', vType === 'variable' || vType === 'field');
+                    }}
+                    autocompleteOptions={autocompleteOptions}
+                    filterOption={filterOption}
+                    placeholder="value"
+                  />
+                </>
+              )}
+            </div>
+            {/* Result row */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontSize: 10, color: '#666', fontWeight: 600 }}>THEN</span>
+              <TypeSelector
+                value={rType}
+                onChange={(t) => {
+                  updateBranch(idx, 'resultType', t);
+                  updateBranch(idx, 'resultIsVariable', t === 'variable' || t === 'field');
+                }}
+              />
+              <ValueInput
+                value={branch.result}
+                valueType={rType}
+                onChange={(val) => {
+                  updateBranch(idx, 'result', val);
+                  updateBranch(idx, 'resultIsVariable', rType === 'variable' || rType === 'field');
+                }}
+                autocompleteOptions={autocompleteOptions}
+                filterOption={filterOption}
+                placeholder="result"
+              />
+            </div>
+            <BranchStylePicker
+              styles={branch.styles}
+              prefix={branch.prefix}
+              suffix={branch.suffix}
+              onChange={(s) => updateBranch(idx, 'styles', s)}
+              onPrefixChange={(v) => updateBranch(idx, 'prefix', v)}
+              onSuffixChange={(v) => updateBranch(idx, 'suffix', v)}
             />
           </div>
-          <BranchStylePicker
-            styles={branch.styles}
-            prefix={branch.prefix}
-            suffix={branch.suffix}
-            onChange={(s) => updateBranch(idx, 'styles', s)}
-            onPrefixChange={(v) => updateBranch(idx, 'prefix', v)}
-            onSuffixChange={(v) => updateBranch(idx, 'suffix', v)}
-          />
-        </div>
-      ))}
+        );
+      })}
 
       <Button size="small" style={{ marginBottom: 8 }} onClick={addBranch}>
         + Add Rule
       </Button>
 
-      <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f5f5f5', borderRadius: 4, fontSize: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>ELSE:</span>
-          <AutoComplete
-            options={autocompleteOptions}
-            filterOption={filterOption}
+      <div style={{ marginBottom: 10, padding: 10, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e8e8e8', fontSize: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, color: '#666' }}>ELSE:</span>
+          <TypeSelector
+            value={resolveValueType(rule.defaultResult, rule.defaultResultIsVariable, rule.defaultResultType)}
+            onChange={(t) => {
+              onRuleChange({
+                ...rule,
+                defaultResultType: t,
+                defaultResultIsVariable: t === 'variable' || t === 'field',
+              });
+            }}
+          />
+          <ValueInput
             value={rule.defaultResult}
-            onSelect={(val) => {
-              onRuleChange({ ...rule, defaultResult: val, defaultResultIsVariable: true });
-            }}
+            valueType={resolveValueType(rule.defaultResult, rule.defaultResultIsVariable, rule.defaultResultType)}
             onChange={(val) => {
-              const isKnown = autocompleteOptions.some(opt => opt.value === val);
-              onRuleChange({ ...rule, defaultResult: val, defaultResultIsVariable: isKnown });
+              const dType = resolveValueType(val, rule.defaultResultIsVariable, rule.defaultResultType);
+              onRuleChange({
+                ...rule,
+                defaultResult: val,
+                defaultResultIsVariable: dType === 'variable' || dType === 'field',
+              });
             }}
+            autocompleteOptions={autocompleteOptions}
+            filterOption={filterOption}
             placeholder="default result"
-            style={{ flex: 1, fontSize: 11 }}
-            size="small"
           />
         </div>
         <BranchStylePicker
@@ -730,8 +833,11 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
         />
       </div>
 
-      <div style={{ marginBottom: 8, padding: 6, backgroundColor: '#f5f5f5', borderRadius: 3, fontSize: 10, fontFamily: 'monospace' }}>
-        {preview}
+      <div style={{ marginBottom: 10, padding: 8, backgroundColor: '#fafafa', borderRadius: 4, border: '1px solid #e8e8e8' }}>
+        <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>Compiled Expression:</div>
+        <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#333', wordBreak: 'break-all' }}>
+          {preview}
+        </div>
       </div>
 
       <Space>

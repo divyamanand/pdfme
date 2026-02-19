@@ -6,6 +6,7 @@ import {
   buildCellAddressMap,
   resolveRulesForCell,
   compileCondition,
+  resolveValueType,
 } from './conditionalFormatting.js';
 
 const expressionCache = new Map<string, (context: Record<string, unknown>) => unknown>();
@@ -665,7 +666,8 @@ const evaluateVisualRule = (
     const condExpr = compileCondition(branch);
     try {
       if (evaluateCompiledExpression(condExpr, context)) {
-        const valueExpr = branch.resultIsVariable
+        const resultType = resolveValueType(branch.result, branch.resultIsVariable, branch.resultType);
+        const valueExpr = (resultType === 'variable' || resultType === 'field')
           ? branch.result
           : JSON.stringify(branch.result);
         const rawValue = String(evaluateCompiledExpression(valueExpr, context) ?? '');
@@ -677,7 +679,8 @@ const evaluateVisualRule = (
     }
   }
   // No branch matched, use default (ELSE)
-  const defExpr = rule.defaultResultIsVariable
+  const defaultType = resolveValueType(rule.defaultResult, rule.defaultResultIsVariable, rule.defaultResultType);
+  const defExpr = (defaultType === 'variable' || defaultType === 'field')
     ? rule.defaultResult
     : JSON.stringify(rule.defaultResult);
   const rawValue = String(evaluateCompiledExpression(defExpr, context) ?? '');

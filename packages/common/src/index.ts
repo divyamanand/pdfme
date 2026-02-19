@@ -84,6 +84,8 @@ import {
   shiftCellRefsInExpression,
   resolveRulesForCell,
   migrateLegacyCF,
+  resolveValueType,
+  emitValue,
 } from './conditionalFormatting.js';
 import type {
   ConditionOperator,
@@ -96,6 +98,7 @@ import type {
   CFStyleOverrides,
   CFEvaluationResult,
   TableCFEvaluationResult,
+  CFValueType,
 } from './conditionalFormatting.js';
 
 export {
@@ -143,6 +146,8 @@ export {
   resolveRulesForCell,
   migrateLegacyCF,
   compileCondition,
+  resolveValueType,
+  emitValue,
   checkFont,
   checkInputs,
   checkUIOptions,
@@ -195,4 +200,5 @@ export type {
   CFStyleOverrides,
   CFEvaluationResult,
   TableCFEvaluationResult,
+  CFValueType,
 };

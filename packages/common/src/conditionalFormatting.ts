@@ -11,6 +11,30 @@ export type ConditionOperator =
   | 'contains' | 'startsWith' | 'endsWith'
   | 'isEmpty' | 'isNotEmpty';
 
+/** Value type for CF branch inputs */
+export type CFValueType = 'variable' | 'text' | 'number' | 'dateTime' | 'field';
+
+/** Infer CFValueType from legacy isVariable flag + value content */
+export function resolveValueType(value: string, isVariable?: boolean, explicitType?: CFValueType): CFValueType {
+  if (explicitType) return explicitType;
+  if (isVariable) return 'variable';
+  const num = Number(value);
+  if (value !== '' && !isNaN(num) && isFinite(num)) return 'number';
+  return 'text';
+}
+
+/** Emit a value as JS source based on its type */
+export function emitValue(value: string, type: CFValueType): string {
+  switch (type) {
+    case 'variable': return value;
+    case 'field':    return value;
+    case 'number':   return value || '0';
+    case 'text':     return JSON.stringify(value);
+    case 'dateTime': return `Date.parse(${JSON.stringify(value)})`;
+    default:         return JSON.stringify(value);
+  }
+}
+
 // ============================================================================
 // STYLE OVERRIDES FOR CONDITIONAL FORMATTING
 // ============================================================================
@@ -67,6 +91,10 @@ export interface VisualConditionBranch {
   prefix?: string;
   /** Text to append after the result value */
   suffix?: string;
+  /** Type of the condition value */
+  valueType?: CFValueType;
+  /** Type of the result value */
+  resultType?: CFValueType;
 }
 
 /**
@@ -83,6 +111,8 @@ export interface VisualRule {
   defaultPrefix?: string;
   /** Suffix for the default result */
   defaultSuffix?: string;
+  /** Type of the default result */
+  defaultResultType?: CFValueType;
 }
 
 /**
@@ -302,16 +332,14 @@ export function compileVisualRulesToExpression(rule: VisualRule): string {
 
   // Build nested ternary chain from last branch inward:
   // cond1 ? val1 : (cond2 ? val2 : (… : defaultVal))
-  let result = rule.defaultResultIsVariable
-    ? rule.defaultResult
-    : JSON.stringify(rule.defaultResult);
+  const defaultType = resolveValueType(rule.defaultResult, rule.defaultResultIsVariable, rule.defaultResultType);
+  let result = emitValue(rule.defaultResult, defaultType);
 
   for (let i = rule.branches.length - 1; i >= 0; i--) {
     const branch = rule.branches[i];
     const condition = compileCondition(branch);
-    const consequent = branch.resultIsVariable
-      ? branch.result
-      : JSON.stringify(branch.result);
+    const resultType = resolveValueType(branch.result, branch.resultIsVariable, branch.resultType);
+    const consequent = emitValue(branch.result, resultType);
     // Wrap the alternate in parens if it contains a ternary (i.e. not the innermost level)
     const needsParens = i < rule.branches.length - 1;
     if (needsParens) {
@@ -329,38 +357,35 @@ export function compileVisualRulesToExpression(rule: VisualRule): string {
  */
 export function compileCondition(branch: VisualConditionBranch): string {
   const field = branch.field;
+  const valueType = resolveValueType(branch.value, branch.valueIsVariable, branch.valueType);
+  const ev = (val: string) => emitValue(val, valueType);
 
-  // Emit value: raw if variable, raw if numeric, quoted otherwise
-  const compileValue = (val: string, isVar?: boolean): string => {
-    if (isVar) return val; // variable reference, emit raw
-    const num = Number(val);
-    if (val !== '' && !isNaN(num) && isFinite(num)) {
-      return val; // emit raw number
-    }
-    return JSON.stringify(val); // emit quoted string
-  };
+  // For dateTime comparisons, wrap the field in Date.parse too
+  const fieldExpr = valueType === 'dateTime' ? `Date.parse(${field})` : field;
 
-  const cv = (val: string) => compileValue(val, branch.valueIsVariable);
+  // For string methods, use text emission for non-variable/field types
+  const stringMethodValue = (val: string) =>
+    (valueType === 'variable' || valueType === 'field') ? val : JSON.stringify(val);
 
   switch (branch.operator) {
     case '==':
-      return `${field} == ${cv(branch.value)}`;
+      return `${fieldExpr} == ${ev(branch.value)}`;
     case '!=':
-      return `${field} != ${cv(branch.value)}`;
+      return `${fieldExpr} != ${ev(branch.value)}`;
     case '<':
-      return `${field} < ${cv(branch.value)}`;
+      return `${fieldExpr} < ${ev(branch.value)}`;
     case '<=':
-      return `${field} <= ${cv(branch.value)}`;
+      return `${fieldExpr} <= ${ev(branch.value)}`;
     case '>':
-      return `${field} > ${cv(branch.value)}`;
+      return `${fieldExpr} > ${ev(branch.value)}`;
     case '>=':
-      return `${field} >= ${cv(branch.value)}`;
+      return `${fieldExpr} >= ${ev(branch.value)}`;
     case 'contains':
-      return `String(${field}).includes(${branch.valueIsVariable ? branch.value : JSON.stringify(branch.value)})`;
+      return `String(${field}).includes(${stringMethodValue(branch.value)})`;
     case 'startsWith':
-      return `String(${field}).startsWith(${branch.valueIsVariable ? branch.value : JSON.stringify(branch.value)})`;
+      return `String(${field}).startsWith(${stringMethodValue(branch.value)})`;
     case 'endsWith':
-      return `String(${field}).endsWith(${branch.valueIsVariable ? branch.value : JSON.stringify(branch.value)})`;
+      return `String(${field}).endsWith(${stringMethodValue(branch.value)})`;
     case 'isEmpty':
       return `!${field}`;
     case 'isNotEmpty':
