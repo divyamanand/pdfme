@@ -1,6 +1,6 @@
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import type { TableSchema, CellStyle, Styles } from './types.js';
-import { px2mm, ZOOM, shiftCFRows, shiftCFCols } from '@pdfme/common';
+import { px2mm, ZOOM, shiftCFRows, shiftCFCols, colIndexToLetter } from '@pdfme/common';
 import { createSingleTable } from './tableHelper.js';
 import { getBody, getBodyWithRange } from './helper.js';
 import cell from './cell.js';
@@ -442,6 +442,102 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
       });
       rootElement.appendChild(dragHandle);
     });
+  }
+
+  // ---- Designer: Cell indexes (A,B,C / 1,2,3) and CF preview overlays ----
+  if (mode === 'designer') {
+    const startRange = schema.__bodyRange?.start ?? 0;
+
+    // Column letter labels above the table
+    let colLabelX = 0;
+    table.columns.forEach((column, i) => {
+      const lbl = document.createElement('div');
+      lbl.textContent = colIndexToLetter(i);
+      Object.assign(lbl.style, {
+        position: 'absolute',
+        top: `${-px2mm(buttonSize + 18)}mm`,
+        left: `${colLabelX}mm`,
+        width: `${column.width}mm`,
+        height: `${px2mm(16)}mm`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '11px',
+        fontWeight: '600',
+        color: '#888',
+        background: 'rgba(0,0,0,0.04)',
+        borderRadius: '2px',
+        pointerEvents: 'none',
+      });
+      rootElement.appendChild(lbl);
+      colLabelX += column.width;
+    });
+
+    // Row number labels to the left of body rows
+    let rowLabelY = showHead ? table.getHeadHeight() : 0;
+    table.body.forEach((row, i) => {
+      const lbl = document.createElement('div');
+      lbl.textContent = String(i + startRange + 1);
+      Object.assign(lbl.style, {
+        position: 'absolute',
+        top: `${rowLabelY}mm`,
+        left: `${-px2mm(24)}mm`,
+        width: `${px2mm(20)}mm`,
+        height: `${row.height}mm`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '11px',
+        fontWeight: '600',
+        color: '#888',
+        background: 'rgba(0,0,0,0.04)',
+        borderRadius: '2px',
+        pointerEvents: 'none',
+      });
+      rootElement.appendChild(lbl);
+      rowLabelY += row.height;
+    });
+
+    // CF expression preview overlays on body cells
+    if (schema.conditionalFormatting) {
+      let cfRowY = showHead ? table.getHeadHeight() : 0;
+      table.body.forEach((row, rowIndex) => {
+        let cfColX = 0;
+        Object.values(row.cells).forEach((bodyCell, colIndex) => {
+          const cfKey = `${rowIndex + startRange}:${colIndex}`;
+          const rules = (schema.conditionalFormatting as any)?.[cfKey];
+          if (rules && Array.isArray(rules) && rules.length > 0) {
+            const overlay = document.createElement('div');
+            Object.assign(overlay.style, {
+              position: 'absolute',
+              top: `${cfRowY + bodyCell.height - px2mm(14)}mm`,
+              left: `${cfColX}mm`,
+              width: `${bodyCell.width}mm`,
+              background: 'rgba(37,194,160,0.12)',
+              borderTop: '1px dashed rgba(37,194,160,0.5)',
+              padding: '0 3px',
+              fontSize: '9px',
+              fontFamily: 'monospace',
+              color: '#1a9979',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              lineHeight: `${px2mm(14)}mm`,
+              pointerEvents: 'none',
+              zIndex: '5',
+              boxSizing: 'border-box',
+            });
+            overlay.textContent = rules.map((r: any) => r.compiledExpression).join(' | ');
+            overlay.title = rules
+              .map((r: any) => `Token ${r.tokenIndex}: ${r.compiledExpression}`)
+              .join('\n');
+            rootElement.appendChild(overlay);
+          }
+          cfColX += bodyCell.width;
+        });
+        cfRowY += row.height;
+      });
+    }
   }
 
   if (mode === 'viewer') {
