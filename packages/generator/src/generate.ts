@@ -186,7 +186,8 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         } else if (typeof rawInput === 'object' && rawInput !== null) {
           value = JSON.stringify(rawInput);
         } else {
-          value = (rawInput || '') as string;
+          // Use rawInput if provided, otherwise fall back to schema.content for expression evaluation
+          value = (rawInput !== null && rawInput !== '' ? String(rawInput) : (schema.content || '')) as string;
         }
 
         // Evaluate {{...}} expressions for non-readOnly schemas

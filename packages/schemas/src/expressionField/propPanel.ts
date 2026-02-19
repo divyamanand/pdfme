@@ -18,11 +18,11 @@ const ExpressionWidget = (props: PropPanelWidgetProps) => {
   textarea.placeholder = 'e.g. Number(price) * quantity';
 
   const currentContent = (activeSchema as unknown as ExpressionFieldSchema)?.content || '';
-  textarea.value = currentContent.replace(/^\{/, '').replace(/\}$/, '');
+  textarea.value = currentContent.replace(/^\{\{/, '').replace(/\}\}$/, '');
 
   textarea.addEventListener('blur', () => {
     const val = textarea.value.trim();
-    const wrapped = val ? `{${val}}` : '{date}';
+    const wrapped = val ? `{{${val}}}` : '{{date}}';
     changeSchemas([{ key: 'content', value: wrapped, schemaId: activeSchema.id }]);
   });
 
@@ -132,7 +132,7 @@ export const propPanel: PropPanel<ExpressionFieldSchema> = {
   defaultSchema: {
     name: '',
     type: 'expressionField',
-    content: '{date}',
+    content: '{{date}}',
     readOnly: true,
     position: { x: 0, y: 0 },
     width: 60,

@@ -47,8 +47,8 @@ export const uiRender = async (arg: UIRenderProps<ExpressionFieldSchema>) => {
     opacity: String(schema.opacity ?? 1),
   });
 
-  // Designer: show raw expression with braces (visually marks it as code)
+  // Designer: show raw expression with double braces (visually marks it as code)
   // Viewer/Form: show the resolved value
-  div.textContent = isDesigner ? (schema.content || '{ expression }') : value;
+  div.textContent = isDesigner ? (schema.content || '{{ expression }}') : value;
   rootElement.appendChild(div);
 };

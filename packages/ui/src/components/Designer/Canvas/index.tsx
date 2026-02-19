@@ -19,6 +19,8 @@ import {
   BasePdf,
   isBlankPdf,
   replacePlaceholders,
+  evaluateExpressions,
+  evaluateTableCellExpressions,
 } from '@pdfme/common';
 import { PluginsRegistry } from '../../../contexts.js';
 import { X } from 'lucide-react';
@@ -482,21 +484,29 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
 
           const content = schema.content || '';
           let value = content;
+          const variables = {
+            ...schemasList.flat().reduce(
+              (acc, currSchema) => {
+                acc[currSchema.name] = currSchema.content || '';
+                return acc;
+              },
+              {} as Record<string, string>,
+            ),
+            totalPages: schemasList.length,
+            currentPage: index + 1,
+          };
 
-          if (mode !== 'designer' && schema.readOnly) {
-            const variables = {
-              ...schemasList.flat().reduce(
-                (acc, currSchema) => {
-                  acc[currSchema.name] = currSchema.content || '';
-                  return acc;
-                },
-                {} as Record<string, string>,
-              ),
-              totalPages: schemasList.length,
-              currentPage: index + 1,
-            };
-
-            value = replacePlaceholders({ content, variables, schemas: schemasList });
+          if (mode !== 'designer') {
+            if (schema.readOnly) {
+              value = replacePlaceholders({ content, variables, schemas: schemasList });
+            } else {
+              // Evaluate {{...}} expressions for non-readOnly schemas in viewer mode
+              if (schema.type === 'table' || schema.type === 'nestedTable') {
+                value = evaluateTableCellExpressions({ value, variables, schemas: schemasList });
+              } else if (schema.type !== 'image' && schema.type !== 'signature') {
+                value = evaluateExpressions({ content: value, variables, schemas: schemasList });
+              }
+            }
           }
 
           return (

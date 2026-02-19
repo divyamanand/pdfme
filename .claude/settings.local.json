@@ -32,7 +32,8 @@
       "Bash(cat:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
