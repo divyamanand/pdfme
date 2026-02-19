@@ -91,8 +91,12 @@ const Paper = (props: {
               left: leftCenteringIndent,
               position: 'relative',
               backgroundColor: pageBackgroundColors?.[paperIndex] || 'white',
-              backgroundImage: `url(${background})`,
-              backgroundSize: `${paperSize.width}px ${paperSize.height}px`,
+              backgroundImage: pageBackgroundColors?.[paperIndex]
+                ? 'none'
+                : `url(${background})`,
+              backgroundSize: pageBackgroundColors?.[paperIndex]
+                ? undefined
+                : `${paperSize.width}px ${paperSize.height}px`,
               ...paperSize,
             }}
           >

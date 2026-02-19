@@ -420,7 +420,7 @@ const TemplateEditor = ({
             <strong>Background Color</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
               <ColorPicker
-                value={currentBgColor || '#ffffff'}
+                defaultValue={currentBgColor || '#ffffff'}
                 onChange={(color) => { newBgColor = typeof color === 'string' ? color : color.toHexString(); }}
                 showText
               />
