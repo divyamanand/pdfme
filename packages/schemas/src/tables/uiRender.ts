@@ -297,7 +297,9 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
             const changes: Array<{ key: string; value: any }> = [
               { key: 'content', value: JSON.stringify(newTableBody) },
             ];
-            if (schema.conditionalFormatting) {
+            // Preserve CF rules intact when removing the last row so they
+            // can be re-applied when new rows are added back.
+            if (schema.conditionalFormatting && newTableBody.length > 0) {
               changes.push({
                 key: 'conditionalFormatting',
                 value: shiftCFRows(schema.conditionalFormatting, removedRowIndex, -1),
