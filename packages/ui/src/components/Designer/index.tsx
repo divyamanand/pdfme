@@ -16,6 +16,7 @@ import { Modal, InputNumber } from 'antd';
 import RightSidebar from './RightSidebar/index.js';
 import LeftSidebar from './LeftSidebar.js';
 import Canvas from './Canvas/index.js';
+import ConditionalFormattingDialog from './ConditionalFormattingDialog.js';
 import { RULER_HEIGHT, RIGHT_SIDEBAR_WIDTH, LEFT_SIDEBAR_WIDTH } from '../../constants.js';
 import { I18nContext, OptionsContext, PluginsRegistry } from '../../contexts.js';
 import {
@@ -75,6 +76,7 @@ const TemplateEditor = ({
   const [zoomLevel, setZoomLevel] = useState(options.zoomLevel ?? 1);
   const [sidebarOpen, setSidebarOpen] = useState(options.sidebarOpen ?? true);
   const [prevTemplate, setPrevTemplate] = useState<Template | null>(null);
+  const [cfDialogOpen, setCfDialogOpen] = useState(false);
 
   const { backgrounds, pageSizes, scale, error, refresh } = useUIPreProcessor({
     template,
@@ -82,6 +84,10 @@ const TemplateEditor = ({
     zoomLevel,
     maxZoom,
   });
+
+  const currentPageHasTables = (schemasList[pageCursor] ?? []).some(
+    (s) => s.type === 'table' || s.type === 'nestedTable',
+  );
 
   const onEdit = (targets: HTMLElement[]) => {
     setActiveElements(targets);
@@ -386,6 +392,8 @@ const TemplateEditor = ({
             }}
             zoomLevel={zoomLevel}
             setZoomLevel={setZoomLevel}
+            onCFClick={() => setCfDialogOpen(true)}
+            hasTables={currentPageHasTables}
             {...pageManipulation}
           />
 
@@ -431,6 +439,13 @@ const TemplateEditor = ({
             removeSchemas={removeSchemas}
             sidebarOpen={sidebarOpen}
             onEdit={onEdit}
+          />
+
+          <ConditionalFormattingDialog
+            open={cfDialogOpen}
+            onClose={() => setCfDialogOpen(false)}
+            schemas={schemasList[pageCursor] ?? []}
+            changeSchemas={changeSchemas}
           />
         </div>
       </DndContext>

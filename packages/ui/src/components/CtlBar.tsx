@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { Size } from '@pdfme/common';
 // Import icons from lucide-react
 // Note: In tests, these will be mocked by the mock file in __mocks__/lucide-react.js
-import { Plus, Minus, Ellipsis } from 'lucide-react';
+import { Plus, Minus, Ellipsis, TableProperties } from 'lucide-react';
 
 import type { MenuProps } from 'antd';
 import { theme, Typography, Button, Dropdown } from 'antd';
@@ -111,6 +111,8 @@ type CtlBarProps = {
   addPageAfter?: () => void;
   clonePageAfter?: () => void;
   removePage?: () => void;
+  onCFClick?: () => void;
+  hasTables?: boolean;
 };
 
 const CtlBar = (props: CtlBarProps) => {
@@ -127,6 +129,8 @@ const CtlBar = (props: CtlBarProps) => {
     addPageAfter,
     clonePageAfter,
     removePage,
+    onCFClick,
+    hasTables,
   } = props;
 
   const contextMenuItems: MenuProps['items'] = [];
@@ -151,7 +155,8 @@ const CtlBar = (props: CtlBarProps) => {
 
   const barWidth = 300;
   const contextMenuWidth = contextMenuItems.length > 0 ? 50 : 0;
-  const width = (pageNum > 1 ? barWidth : barWidth / 2) + contextMenuWidth;
+  const cfButtonWidth = hasTables && onCFClick ? 40 : 0;
+  const width = (pageNum > 1 ? barWidth : barWidth / 2) + contextMenuWidth + cfButtonWidth;
 
   const textStyle = {
     color: token.colorWhite,
@@ -187,6 +192,15 @@ const CtlBar = (props: CtlBarProps) => {
               setPageCursor={setPageCursor}
             />
           </div>
+        )}
+        {hasTables && onCFClick && (
+          <Button
+            className={UI_CLASSNAME + 'cf-conditions'}
+            type="text"
+            title="Cell Conditions"
+            onClick={onCFClick}
+            icon={<TableProperties size={16} color={textStyle.color} />}
+          />
         )}
         <div className={UI_CLASSNAME + 'zoom'}>
           <Zoom style={{ textStyle }} zoomLevel={zoomLevel} setZoomLevel={setZoomLevel} />

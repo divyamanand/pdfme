@@ -493,6 +493,37 @@ function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
 // ============================================================================
 
 /**
+ * Clone a CellTokenRule and shift all cell references in compiledExpression + visual branches.
+ * Used when copying a rule to a different row/column, or when applying wildcard rules.
+ *
+ * Example: shiftRule(rule, 2, 0) → new rule with all cell refs shifted down 2 rows
+ */
+export function shiftRule(
+  rule: CellTokenRule,
+  rowDelta: number,
+  colDelta: number,
+): CellTokenRule {
+  const shifted: CellTokenRule = {
+    ...rule,
+    compiledExpression: shiftCellRefsInExpression(rule.compiledExpression, rowDelta, colDelta),
+  };
+  if (rule.visualRule) {
+    shifted.visualRule = {
+      branches: rule.visualRule.branches.map((b) => ({
+        ...b,
+        field: shiftCellRefsInExpression(b.field, rowDelta, colDelta),
+        value: b.valueIsVariable
+          ? shiftCellRefsInExpression(b.value, rowDelta, colDelta)
+          : b.value,
+      })),
+      defaultResult: rule.visualRule.defaultResult,
+      defaultResultIsVariable: rule.visualRule.defaultResultIsVariable,
+    };
+  }
+  return shifted;
+}
+
+/**
  * Shift Excel-style cell references (A1, B2, AA3, etc.) in an expression string.
  * Used when applying a wildcard column/row rule to a specific cell, or when copying rules.
  *

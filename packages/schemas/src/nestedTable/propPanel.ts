@@ -14,7 +14,6 @@ import {
   generateNodeId,
   getLeafNodes,
 } from './treeUtils.js';
-import { conditionalFormattingWidget } from '../tables/conditionalFormattingWidget.js';
 
 export const propPanel: PropPanel<NestedTableSchema> = {
   schema: ({ activeSchema, options, i18n }) => {
@@ -91,14 +90,6 @@ export const propPanel: PropPanel<NestedTableSchema> = {
         widget: 'NestedHeaderTreeEditor',
         span: 24,
       },
-      '----cf': { type: 'void', widget: 'Divider' },
-      conditionalFormatting: {
-        title: 'Cell Conditions',
-        type: 'object',
-        widget: 'ConditionalFormattingEditor',
-        bind: false,
-        span: 24,
-      },
     };
   },
   defaultSchema: {
@@ -155,7 +146,6 @@ export const propPanel: PropPanel<NestedTableSchema> = {
     columnStyles: {},
   },
   widgets: {
-    ConditionalFormattingEditor: conditionalFormattingWidget,
     NestedHeaderTreeEditor: ({ rootElement, changeSchemas, activeSchema }) => {
       const schema = activeSchema as unknown as NestedTableSchema;
 
