@@ -445,6 +445,7 @@ const TemplateEditor = ({
             open={cfDialogOpen}
             onClose={() => setCfDialogOpen(false)}
             schemas={schemasList[pageCursor] ?? []}
+            allSchemas={schemasList.flat()}
             changeSchemas={changeSchemas}
           />
         </div>

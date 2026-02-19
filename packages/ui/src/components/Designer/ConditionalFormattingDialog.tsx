@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { Modal, Select, Button, Tabs, Input, Space } from 'antd';
-import { DeleteOutlined, CopyOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
+import { Modal, Select, Button, Input, Space, AutoComplete } from 'antd';
+import { DeleteOutlined } from '@ant-design/icons';
 import type {
   TableConditionalFormatting,
   CellTokenRule,
@@ -14,8 +14,6 @@ import {
   parseTokens,
   replaceTokenAtIndex,
   compileVisualRulesToExpression,
-  tryParseExpressionToVisualRule,
-  shiftCellRefsInExpression,
   shiftRule,
 } from '@pdfme/common';
 import type { VisualConditionBranch } from '@pdfme/common';
@@ -41,6 +39,7 @@ interface ConditionalFormattingDialogProps {
   open: boolean;
   onClose: () => void;
   schemas: SchemaForUI[];
+  allSchemas: SchemaForUI[];
   changeSchemas: ChangeSchemas;
 }
 
@@ -48,11 +47,12 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
   open,
   onClose,
   schemas,
+  allSchemas,
   changeSchemas,
 }) => {
   const i18n = useContext(I18nContext);
 
-  // Get all table/nestedTable schemas
+  // Get all table/nestedTable schemas on current page
   const tableSchemas = schemas.filter((s) => s.type === 'table' || s.type === 'nestedTable');
 
   // State
@@ -63,15 +63,23 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
   const [currentMode, setCurrentMode] = useState<'visual' | 'code'>('visual');
   const [scope, setScope] = useState<'cell' | 'column' | 'row'>('cell');
 
-  // Auto-select first table when dialog opens
+  // Compute effective table ID synchronously — fallback to first table if current selection is invalid
+  const effectiveTableId = useMemo(() => {
+    if (selectedTableId && tableSchemas.some((s) => s.id === selectedTableId)) {
+      return selectedTableId;
+    }
+    return tableSchemas[0]?.id || '';
+  }, [selectedTableId, tableSchemas]);
+
+  // Reset selection state when effective table changes
   useEffect(() => {
-    if (open && tableSchemas.length > 0 && !selectedTableId) {
-      setSelectedTableId(tableSchemas[0].id);
+    if (effectiveTableId !== selectedTableId) {
+      setSelectedTableId(effectiveTableId);
       setSelectedRow(0);
       setSelectedCol(0);
       setSelectedTokenIndex(0);
     }
-  }, [open, tableSchemas, selectedTableId]);
+  }, [effectiveTableId, selectedTableId]);
 
   // Listen for canvas cell-select events
   useEffect(() => {
@@ -79,7 +87,7 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
 
     const handleCellSelect = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.schemaId === selectedTableId && detail.row !== undefined && detail.col !== undefined) {
+      if (detail?.schemaId === effectiveTableId && detail.row !== undefined && detail.col !== undefined) {
         setSelectedRow(detail.row);
         setSelectedCol(detail.col);
         setSelectedTokenIndex(0);
@@ -88,18 +96,18 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
 
     document.addEventListener('pdfme-table-cell-select', handleCellSelect);
     return () => document.removeEventListener('pdfme-table-cell-select', handleCellSelect);
-  }, [open, selectedTableId]);
+  }, [open, effectiveTableId]);
 
-  const selectedSchema = tableSchemas.find((s) => s.id === selectedTableId) as any;
+  const selectedSchema = tableSchemas.find((s) => s.id === effectiveTableId) as any;
 
-  const content: string[][] = (() => {
+  const content: string[][] = useMemo(() => {
     if (!selectedSchema) return [];
     try {
       return JSON.parse(selectedSchema.content || '[]');
     } catch {
       return [];
     }
-  })();
+  }, [selectedSchema?.content]);
   const numRows = content.length;
   const numCols = content[0]?.length ?? 0;
 
@@ -134,25 +142,30 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
     return { tokens, isVirtual: false };
   };
 
-  // Helper: build autocomplete options
-  const buildAutocompleteList = (): string[] => {
-    const options: string[] = [];
-    // Field names
-    for (const s of schemas) {
-      if (s.name && !options.includes(s.name)) options.push(s.name);
+  // Build autocomplete options — includes ALL schema field names + builtins + cell refs
+  const autocompleteOptions = useMemo((): { value: string; label: string }[] => {
+    const seen = new Set<string>();
+    const options: { value: string; label: string }[] = [];
+    const add = (val: string, label?: string) => {
+      if (!seen.has(val)) {
+        seen.add(val);
+        options.push({ value: val, label: label || val });
+      }
+    };
+
+    // All schema field names across all pages
+    for (const s of allSchemas) {
+      if (s.name) add(s.name, `${s.name} (field)`);
     }
     // Builtins
-    for (const b of BUILTINS) {
-      if (!options.includes(b)) options.push(b);
-    }
+    for (const b of BUILTINS) add(b, `${b} (builtin)`);
     // Current table cell refs
     for (let r = 0; r < numRows; r++) {
       for (let c = 0; c < numCols; c++) {
-        const ref = colIndexToLetter(c) + (r + 1);
-        if (!options.includes(ref)) options.push(ref);
+        add(colIndexToLetter(c) + (r + 1));
       }
     }
-    // Cross-table cell refs
+    // Cross-table cell refs (tableName.A1)
     for (const s of schemas) {
       if (s.type !== 'table' && s.type !== 'nestedTable') continue;
       if (!s.name) continue;
@@ -160,8 +173,7 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
         const rows: string[][] = JSON.parse((s as any).content || '[]');
         for (let r = 0; r < rows.length; r++) {
           for (let c = 0; c < (rows[0]?.length ?? 0); c++) {
-            const ref = `${s.name}.${colIndexToLetter(c)}${r + 1}`;
-            if (!options.includes(ref)) options.push(ref);
+            add(`${s.name}.${colIndexToLetter(c)}${r + 1}`);
           }
         }
       } catch {
@@ -169,7 +181,7 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
       }
     }
     return options;
-  };
+  }, [allSchemas, schemas, numRows, numCols]);
 
   const applySingleCell = useCallback(
     (updatedCF: any, updatedContent: string[][], row: number, col: number, rule: CellTokenRule): void => {
@@ -277,8 +289,13 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
       <div style={{ marginBottom: 16 }}>
         <label style={{ fontSize: 12, fontWeight: 600, marginRight: 8 }}>Table:</label>
         <Select
-          value={selectedTableId}
-          onChange={setSelectedTableId}
+          value={effectiveTableId}
+          onChange={(val) => {
+            setSelectedTableId(val);
+            setSelectedRow(0);
+            setSelectedCol(0);
+            setSelectedTokenIndex(0);
+          }}
           style={{ width: 300 }}
           options={tableSchemas.map((s) => ({
             value: s.id,
@@ -415,7 +432,7 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
             existingRule={existingRule}
             onSave={saveWithScope}
             onClear={clearRule}
-            autocompleteOptions={buildAutocompleteList()}
+            autocompleteOptions={autocompleteOptions}
           />
 
           {/* Scope Selector */}
@@ -477,7 +494,7 @@ interface RuleEditorProps {
   existingRule: CellTokenRule | undefined;
   onSave: (rule: CellTokenRule) => void;
   onClear: () => void;
-  autocompleteOptions: string[];
+  autocompleteOptions: { value: string; label: string }[];
 }
 
 const RuleEditor: React.FC<RuleEditorProps> = ({ mode, existingRule, onSave, onClear, autocompleteOptions }) => {
@@ -527,7 +544,7 @@ interface VisualRuleEditorProps {
   onRuleChange: (rule: VisualRule) => void;
   onSave: () => void;
   onClear: () => void;
-  autocompleteOptions: string[];
+  autocompleteOptions: { value: string; label: string }[];
 }
 
 const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange, onSave, onClear, autocompleteOptions }) => {
@@ -553,28 +570,28 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
 
   const preview = compileVisualRulesToExpression(rule);
 
+  const filterOption = (inputValue: string, option?: { value: string; label: string }) =>
+    (option?.value ?? '').toLowerCase().includes(inputValue.toLowerCase());
+
   return (
     <div>
       {rule.branches.map((branch, idx) => (
         <div key={idx} style={{ marginBottom: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600 }}>{idx === 0 ? 'IF' : 'ELSE IF'}</span>
-            <Input
-              placeholder="field"
+            <AutoComplete
+              options={autocompleteOptions}
+              filterOption={filterOption}
               value={branch.field}
-              onChange={(e) => updateBranch(idx, 'field', e.target.value)}
-              list={`ac-field-${idx}`}
-              style={{ width: 70, fontSize: 11, height: 24 }}
+              onChange={(val) => updateBranch(idx, 'field', val)}
+              placeholder="field"
+              style={{ width: 100, fontSize: 11 }}
+              size="small"
             />
-            <datalist id={`ac-field-${idx}`}>
-              {autocompleteOptions.map((opt) => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
             <select
               value={branch.operator}
               onChange={(e) => updateBranch(idx, 'operator', e.target.value as ConditionOperator)}
-              style={{ width: 75, fontSize: 11, height: 24 }}
+              style={{ width: 85, fontSize: 11, height: 24 }}
             >
               {OPERATORS.map((op) => (
                 <option key={op.value} value={op.value}>
@@ -583,32 +600,26 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
               ))}
             </select>
             {!['isEmpty', 'isNotEmpty'].includes(branch.operator) && (
-              <Input
-                placeholder="value"
+              <AutoComplete
+                options={autocompleteOptions}
+                filterOption={filterOption}
                 value={branch.value}
-                onChange={(e) => updateBranch(idx, 'value', e.target.value)}
-                list={`ac-val-${idx}`}
-                style={{ width: 60, fontSize: 11, height: 24 }}
+                onChange={(val) => updateBranch(idx, 'value', val)}
+                placeholder="value"
+                style={{ width: 100, fontSize: 11 }}
+                size="small"
               />
             )}
-            <datalist id={`ac-val-${idx}`}>
-              {autocompleteOptions.map((opt) => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
             <span style={{ fontSize: 10, color: '#999' }}>→</span>
-            <Input
-              placeholder="result"
+            <AutoComplete
+              options={autocompleteOptions}
+              filterOption={filterOption}
               value={branch.result}
-              onChange={(e) => updateBranch(idx, 'result', e.target.value)}
-              list={`ac-res-${idx}`}
-              style={{ width: 60, fontSize: 11, height: 24 }}
+              onChange={(val) => updateBranch(idx, 'result', val)}
+              placeholder="result"
+              style={{ width: 100, fontSize: 11 }}
+              size="small"
             />
-            <datalist id={`ac-res-${idx}`}>
-              {autocompleteOptions.map((opt) => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
             <Button
               type="text"
               danger
