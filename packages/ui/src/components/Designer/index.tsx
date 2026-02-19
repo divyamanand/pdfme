@@ -41,6 +41,48 @@ import CtlBar from '../CtlBar.js';
  * It moves left or right from the top-left corner of the drag icon depending on the scale.
  * This function calculates the adjustment needed to compensate for this displacement.
  */
+/**
+ * Stateful color picker for use inside Modal.confirm (which renders static content).
+ * Manages its own state so Clear button works visually, and syncs changes
+ * back to the parent via onColorChange callback.
+ */
+const BgColorPicker: React.FC<{
+  initialColor: string;
+  onColorChange: (color: string) => void;
+}> = ({ initialColor, onColorChange }) => {
+  const [color, setColor] = useState(initialColor || '#ffffff');
+  const [cleared, setCleared] = useState(false);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+      {!cleared && (
+        <ColorPicker
+          value={color}
+          onChange={(c) => {
+            const hex = typeof c === 'string' ? c : c.toHexString();
+            setColor(hex);
+            onColorChange(hex);
+          }}
+          showText
+        />
+      )}
+      {cleared && (
+        <span style={{ fontSize: 12, color: '#999' }}>No background color</span>
+      )}
+      <Button
+        size="small"
+        onClick={() => {
+          setCleared(!cleared);
+          if (!cleared) {
+            onColorChange('');
+          } else {
+            onColorChange(color);
+          }
+        }}
+      >{cleared ? 'Set Color' : 'Clear'}</Button>
+    </div>
+  );
+};
+
 const scaleDragPosAdjustment = (adjustment: number, scale: number): number => {
   if (scale > 1) return adjustment * (scale - 1);
   if (scale < 1) return adjustment * -(1 - scale);
@@ -77,6 +119,7 @@ const TemplateEditor = ({
   const [pageCursor, setPageCursor] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(options.zoomLevel ?? 1);
   const [sidebarOpen, setSidebarOpen] = useState(options.sidebarOpen ?? true);
+  const [showGrid, setShowGrid] = useState(false);
   const [prevTemplate, setPrevTemplate] = useState<Template | null>(null);
   const [cfDialogOpen, setCfDialogOpen] = useState(false);
 
@@ -418,17 +461,10 @@ const TemplateEditor = ({
           </div>
           <div style={{ marginBottom: 8 }}>
             <strong>Background Color</strong>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <ColorPicker
-                defaultValue={currentBgColor || '#ffffff'}
-                onChange={(color) => { newBgColor = typeof color === 'string' ? color : color.toHexString(); }}
-                showText
-              />
-              <Button
-                size="small"
-                onClick={() => { newBgColor = ''; }}
-              >Clear</Button>
-            </div>
+            <BgColorPicker
+              initialColor={currentBgColor}
+              onColorChange={(c) => { newBgColor = c; }}
+            />
           </div>
         </div>
       ),
@@ -531,6 +567,8 @@ const TemplateEditor = ({
             }}
             zoomLevel={zoomLevel}
             setZoomLevel={setZoomLevel}
+            showGrid={showGrid}
+            setShowGrid={setShowGrid}
             onCFClick={() => setCfDialogOpen(true)}
             hasCFEligible={currentPageHasCFEligible}
             {...pageManipulation}
@@ -578,6 +616,9 @@ const TemplateEditor = ({
             removeSchemas={removeSchemas}
             sidebarOpen={sidebarOpen}
             onEdit={onEdit}
+            zoomLevel={zoomLevel}
+            setZoomLevel={setZoomLevel}
+            showGrid={showGrid}
           />
 
           <ConditionalFormattingDialog

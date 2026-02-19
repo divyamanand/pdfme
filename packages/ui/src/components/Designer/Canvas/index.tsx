@@ -104,6 +104,9 @@ interface Props {
   removeSchemas: (ids: string[]) => void;
   paperRefs: MutableRefObject<HTMLDivElement[]>;
   sidebarOpen: boolean;
+  zoomLevel: number;
+  setZoomLevel: (zoom: number) => void;
+  showGrid: boolean;
 }
 
 const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
@@ -123,6 +126,9 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
     onChangeHoveringSchemaId,
     paperRefs,
     sidebarOpen,
+    zoomLevel,
+    setZoomLevel,
+    showGrid,
   } = props;
   const { token } = theme.useToken();
   const pluginsRegistry = useContext(PluginsRegistry);
@@ -158,6 +164,27 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
 
     return destroyEvents;
   }, [initEvents, destroyEvents]);
+
+  // Ctrl+scroll wheel zoom: prevent browser zoom and zoom the canvas instead
+  useEffect(() => {
+    const canvasEl = (ref as React.RefObject<HTMLDivElement>)?.current;
+    if (!canvasEl) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const zoomStep = 0.1;
+        const minZoom = 0.25;
+        const maxZoom = 4;
+        const delta = e.deltaY > 0 ? -zoomStep : zoomStep;
+        const next = Math.round((zoomLevel + delta) * 100) / 100;
+        if (next >= minZoom && next <= maxZoom) {
+          setZoomLevel(next);
+        }
+      }
+    };
+    canvasEl.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvasEl.removeEventListener('wheel', onWheel);
+  }, [ref, zoomLevel, setZoomLevel]);
 
   useEffect(() => {
     moveable.current?.updateRect();
@@ -436,6 +463,23 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
               <DeleteButton activeElements={activeElements} />
             )}
             <Padding basePdf={basePdf} pageCursor={pageCursor} />
+            {showGrid && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: paperSize.width,
+                  height: paperSize.height,
+                  backgroundImage:
+                    'linear-gradient(to right, rgba(0,0,0,0.08) 1px, transparent 1px), ' +
+                    'linear-gradient(to bottom, rgba(0,0,0,0.08) 1px, transparent 1px)',
+                  backgroundSize: `${mm2px(10)}px ${mm2px(10)}px`,
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                }}
+              />
+            )}
             <StaticSchema
               template={{ schemas: schemasList, basePdf }}
               input={Object.fromEntries(

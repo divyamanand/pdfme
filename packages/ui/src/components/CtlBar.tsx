@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { Size } from '@pdfme/common';
 // Import icons from lucide-react
 // Note: In tests, these will be mocked by the mock file in __mocks__/lucide-react.js
-import { Plus, Minus, Ellipsis, TableProperties } from 'lucide-react';
+import { Plus, Minus, Ellipsis, TableProperties, Grid3x3 } from 'lucide-react';
 
 import type { MenuProps } from 'antd';
 import { theme, Typography, Button, Dropdown } from 'antd';
@@ -108,6 +108,8 @@ type CtlBarProps = {
   setPageCursor: (page: number) => void;
   zoomLevel: number;
   setZoomLevel: (zoom: number) => void;
+  showGrid?: boolean;
+  setShowGrid?: (show: boolean) => void;
   addPageAfter?: () => void;
   clonePageAfter?: () => void;
   removePage?: () => void;
@@ -127,6 +129,8 @@ const CtlBar = (props: CtlBarProps) => {
     setPageCursor,
     zoomLevel,
     setZoomLevel,
+    showGrid,
+    setShowGrid,
     addPageAfter,
     clonePageAfter,
     removePage,
@@ -164,7 +168,8 @@ const CtlBar = (props: CtlBarProps) => {
   const barWidth = 300;
   const contextMenuWidth = contextMenuItems.length > 0 ? 50 : 0;
   const cfButtonWidth = hasCFEligible && onCFClick ? 40 : 0;
-  const width = (pageNum > 1 ? barWidth : barWidth / 2) + contextMenuWidth + cfButtonWidth;
+  const gridButtonWidth = setShowGrid ? 40 : 0;
+  const width = (pageNum > 1 ? barWidth : barWidth / 2) + contextMenuWidth + cfButtonWidth + gridButtonWidth;
 
   const textStyle = {
     color: token.colorWhite,
@@ -208,6 +213,15 @@ const CtlBar = (props: CtlBarProps) => {
             title="Conditional Formatting"
             onClick={onCFClick}
             icon={<TableProperties size={16} color={textStyle.color} />}
+          />
+        )}
+        {setShowGrid && (
+          <Button
+            className={UI_CLASSNAME + 'grid-toggle'}
+            type="text"
+            title="Toggle Grid"
+            onClick={() => setShowGrid(!showGrid)}
+            icon={<Grid3x3 size={16} color={showGrid ? token.colorPrimary : textStyle.color} />}
           />
         )}
         <div className={UI_CLASSNAME + 'zoom'}>
