@@ -64,7 +64,7 @@ import {
   isBlankPdf,
 } from './helper.js';
 import { getDynamicTemplate } from './dynamicTemplate.js';
-import { replacePlaceholders } from './expression.js';
+import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions } from './expression.js';
 import { pluginRegistry } from './pluginRegistry.js';
 
 export {
@@ -91,6 +91,8 @@ export {
   isBlankPdf,
   getDynamicTemplate,
   replacePlaceholders,
+  evaluateExpressions,
+  evaluateTableCellExpressions,
   checkFont,
   checkInputs,
   checkUIOptions,

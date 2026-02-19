@@ -1,4 +1,4 @@
-import { replacePlaceholders } from '../src/expression.js';
+import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions } from '../src/expression.js';
 import { SchemaPageArray } from '../src/index.js';
 
 describe('replacePlaceholders', () => {
@@ -544,5 +544,131 @@ describe('replacePlaceholders - XSS Vulnerability Prevention Tests', () => {
     const result = replacePlaceholders({ content, variables: {}, schemas: [] });
     // Object.seal is now blocked
     expect(result).toBe(content);
+  });
+});
+
+describe('evaluateExpressions (double-brace {{...}} syntax)', () => {
+  it('should return content as is if there are no double-brace expressions', () => {
+    const content = 'Hello, world!';
+    const result = evaluateExpressions({ content, variables: {}, schemas: [] });
+    expect(result).toBe(content);
+  });
+
+  it('should evaluate simple arithmetic expressions', () => {
+    const content = '{{2 + 2}}';
+    const result = evaluateExpressions({ content, variables: {}, schemas: [] });
+    expect(result).toBe('4');
+  });
+
+  it('should interpolate variables in expressions', () => {
+    const content = '{{name.toUpperCase()}}';
+    const variables = { name: 'alice' };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('ALICE');
+  });
+
+  it('should handle conditional expressions', () => {
+    const content = '{{age > 18 ? "Adult" : "Minor"}}';
+    const variables = { age: 20 };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('Adult');
+  });
+
+  it('should handle mixed content with multiple expressions', () => {
+    const content = 'Hello {{firstName + " " + lastName}}, total: {{qty * price}}';
+    const variables = { firstName: 'John', lastName: 'Doe', qty: 3, price: 10 };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('Hello John Doe, total: 30');
+  });
+
+  it('should handle currentPage and totalPages variables', () => {
+    const content = 'Page {{currentPage}} of {{totalPages}}';
+    const variables = { currentPage: 2, totalPages: 5 };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('Page 2 of 5');
+  });
+
+  it('should handle Math operations', () => {
+    const content = '{{Math.round(price * 1.1 * 100) / 100}}';
+    const variables = { price: 9.99 };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('10.99');
+  });
+
+  it('should keep raw expression on error', () => {
+    const content = '{{invalid syntax ((}}';
+    const result = evaluateExpressions({ content, variables: {}, schemas: [] });
+    expect(result).toBe('{{invalid syntax ((}}');
+  });
+
+  it('should handle fast exit when no {{ present', () => {
+    const content = 'Single {brace} only';
+    const result = evaluateExpressions({ content, variables: {}, schemas: [] });
+    expect(result).toBe(content);
+  });
+
+  it('should handle nested braces in expressions', () => {
+    const content = '{{Math.max(1, 2, 3)}}';
+    const result = evaluateExpressions({ content, variables: {}, schemas: [] });
+    expect(result).toBe('3');
+  });
+
+  it('should handle object and array access', () => {
+    const content = '{{user.name}} is {{user.age}} years old';
+    const variables = { user: { name: 'Alice', age: 30 } };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('Alice is 30 years old');
+  });
+
+  it('should handle date variables', () => {
+    const content = 'Today: {{date}}';
+    const variables = { date: '2024/01/15' };
+    const result = evaluateExpressions({ content, variables, schemas: [] });
+    expect(result).toBe('Today: 2024/01/15');
+  });
+});
+
+describe('evaluateTableCellExpressions', () => {
+  it('should evaluate expressions in table cells', () => {
+    const value = '[["{{qty * price}}", "{{qty + 5}}"]]';
+    const variables = { qty: 3, price: 10 };
+    const result = evaluateTableCellExpressions({ value, variables, schemas: [] });
+    expect(JSON.parse(result)).toEqual([['30', '8']]);
+  });
+
+  it('should handle multiple rows with expressions', () => {
+    const value = '[["{{2 + 2}}", "{{3 + 3}}"], ["{{4 + 4}}", "{{5 + 5}}"]]';
+    const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
+    expect(JSON.parse(result)).toEqual([['4', '6'], ['8', '10']]);
+  });
+
+  it('should return value as-is if not valid JSON', () => {
+    const value = 'not valid json';
+    const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
+    expect(result).toBe(value);
+  });
+
+  it('should handle cells without expressions', () => {
+    const value = '[["plain", "text"], ["no", "expressions"]]';
+    const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
+    expect(JSON.parse(result)).toEqual([['plain', 'text'], ['no', 'expressions']]);
+  });
+
+  it('should fast exit if no {{ in value', () => {
+    const value = '[["a", "b"], ["c", "d"]]';
+    const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
+    expect(result).toBe(value);
+  });
+
+  it('should handle mixed cells with and without expressions', () => {
+    const value = '[["{{2 + 2}}", "plain text"], ["another {{3 + 3}}", "no expr"]]';
+    const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
+    expect(JSON.parse(result)).toEqual([['4', 'plain text'], ['another 6', 'no expr']]);
+  });
+
+  it('should handle non-string cell values', () => {
+    const value = '[[1, 2], [true, false]]';
+    const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
+    expect(JSON.parse(result)).toEqual([[1, 2], [true, false]]);
   });
 });

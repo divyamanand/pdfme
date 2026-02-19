@@ -422,16 +422,11 @@ const evaluatePlaceholders = (arg: {
   return resultContent;
 };
 
-export const replacePlaceholders = (arg: {
-  content: string;
-  variables: Record<string, unknown>;
-  schemas: SchemaPageArray;
-}): string => {
-  const { content, variables, schemas } = arg;
-  if (!content || typeof content !== 'string' || !content.includes('{') || !content.includes('}')) {
-    return content;
-  }
-
+// Helper to build evaluation context shared by both replacePlaceholders and evaluateExpressions
+const buildEvalContext = (
+  variables: Record<string, unknown>,
+  schemas: SchemaPageArray,
+): Record<string, unknown> => {
   const date = new Date();
   const formattedDate = formatDate(date);
   const formattedDateTime = formatDateTime(date);
@@ -456,5 +451,139 @@ export const replacePlaceholders = (arg: {
     }
   });
 
+  return context;
+};
+
+export const replacePlaceholders = (arg: {
+  content: string;
+  variables: Record<string, unknown>;
+  schemas: SchemaPageArray;
+}): string => {
+  const { content, variables, schemas } = arg;
+  if (!content || typeof content !== 'string' || !content.includes('{') || !content.includes('}')) {
+    return content;
+  }
+
+  const context = buildEvalContext(variables, schemas);
   return evaluatePlaceholders({ content, context });
+};
+
+/**
+ * Evaluates {{...}} double-brace expressions in content.
+ * Similar to replacePlaceholders but uses {{expr}} syntax instead of {expr}.
+ * Useful for making all plugins expression-aware without the readOnly restriction.
+ */
+export const evaluateExpressions = (arg: {
+  content: string;
+  variables: Record<string, unknown>;
+  schemas: SchemaPageArray;
+}): string => {
+  const { content, variables, schemas } = arg;
+
+  // Fast exit: no double-brace markers
+  if (!content || typeof content !== 'string' || !content.includes('{{') || !content.includes('}}')) {
+    return content;
+  }
+
+  const context = buildEvalContext(variables, schemas);
+
+  let resultContent = '';
+  let i = 0;
+
+  while (i < content.length) {
+    // Look for opening {{
+    const startIndex = content.indexOf('{{', i);
+    if (startIndex === -1) {
+      // No more expressions, append the rest
+      resultContent += content.slice(i);
+      break;
+    }
+
+    // Append content before the expression
+    resultContent += content.slice(i, startIndex);
+
+    // Find matching }}
+    let braceCount = 2; // two opening braces
+    let endIndex = startIndex + 2;
+
+    while (endIndex < content.length && braceCount > 0) {
+      if (content[endIndex] === '{') {
+        braceCount++;
+      } else if (content[endIndex] === '}') {
+        braceCount--;
+      }
+      endIndex++;
+    }
+
+    if (braceCount === 0) {
+      // Found matching closing braces
+      const code = content.slice(startIndex + 2, endIndex - 2).trim();
+
+      if (expressionCache.has(code)) {
+        const evalFunc = expressionCache.get(code)!;
+        try {
+          const value = evalFunc(context);
+          resultContent += String(value !== null && value !== undefined ? value : '');
+        } catch {
+          // On error, keep the raw expression block
+          resultContent += content.slice(startIndex, endIndex);
+        }
+      } else {
+        try {
+          const ast = acorn.parseExpressionAt(code, 0, { ecmaVersion: 'latest' }) as AcornNode;
+          validateAST(ast);
+          const evalFunc = (ctx: Record<string, unknown>) => evaluateAST(ast, ctx);
+          expressionCache.set(code, evalFunc);
+          const value = evalFunc(context);
+          resultContent += String(value !== null && value !== undefined ? value : '');
+        } catch {
+          // On error, keep the raw expression block
+          resultContent += content.slice(startIndex, endIndex);
+        }
+      }
+
+      i = endIndex;
+    } else {
+      // Unmatched braces, keep as-is and continue
+      resultContent += content[startIndex];
+      i = startIndex + 1;
+    }
+  }
+
+  return resultContent;
+};
+
+/**
+ * Evaluates {{...}} expressions in table cell values.
+ * Parses a JSON string[][] (table), evaluates each cell independently, and returns stringified result.
+ */
+export const evaluateTableCellExpressions = (arg: {
+  value: string;
+  variables: Record<string, unknown>;
+  schemas: SchemaPageArray;
+}): string => {
+  const { value, variables, schemas } = arg;
+
+  // Fast exit: no double-brace markers
+  if (!value || typeof value !== 'string' || !value.includes('{{')) {
+    return value;
+  }
+
+  try {
+    const rows = JSON.parse(value) as unknown[][];
+
+    const evaluatedRows = rows.map((row) =>
+      row.map((cell) => {
+        if (typeof cell !== 'string') {
+          return cell;
+        }
+        return evaluateExpressions({ content: cell, variables, schemas });
+      }),
+    );
+
+    return JSON.stringify(evaluatedRows);
+  } catch {
+    // Not valid JSON or parse error, return as-is
+    return value;
+  }
 };

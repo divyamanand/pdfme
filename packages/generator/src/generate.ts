@@ -5,6 +5,8 @@ import {
   getDynamicTemplate,
   isBlankPdf,
   replacePlaceholders,
+  evaluateExpressions,
+  evaluateTableCellExpressions,
   pt2mm,
   cloneDeep,
 } from '@pdfme/common';
@@ -94,10 +96,11 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           }
           const rawInput = input[staticSchema.name];
           let value: string;
+          const varsContext = { ...input, totalPages: basePages.length, currentPage: j + 1 };
           if (staticSchema.readOnly) {
             value = replacePlaceholders({
               content: staticSchema.content || '',
-              variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
+              variables: varsContext,
               schemas: schemas, // Use the properly typed schemas variable
             });
           } else if (
@@ -116,6 +119,15 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
             value = JSON.stringify(rawInput);
           } else {
             value = (rawInput || staticSchema.content || '') as string;
+          }
+
+          // Evaluate {{...}} expressions for non-readOnly schemas
+          if (!staticSchema.readOnly && value) {
+            if (staticSchema.type === 'table' || staticSchema.type === 'nestedTable') {
+              value = evaluateTableCellExpressions({ value, variables: varsContext, schemas });
+            } else if (staticSchema.type !== 'image' && staticSchema.type !== 'signature') {
+              value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+            }
           }
 
           staticSchema.position = {
@@ -152,10 +164,11 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         }
         const rawInput = input[name];
         let value: string;
+        const varsContext = { ...input, totalPages: basePages.length, currentPage: j + 1 };
         if (schema.readOnly) {
           value = replacePlaceholders({
             content: schema.content || '',
-            variables: { ...input, totalPages: basePages.length, currentPage: j + 1 },
+            variables: varsContext,
             schemas: schemas, // Use the properly typed schemas variable
           });
         } else if (
@@ -174,6 +187,15 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           value = JSON.stringify(rawInput);
         } else {
           value = (rawInput || '') as string;
+        }
+
+        // Evaluate {{...}} expressions for non-readOnly schemas
+        if (!schema.readOnly && value) {
+          if (schema.type === 'table' || schema.type === 'nestedTable') {
+            value = evaluateTableCellExpressions({ value, variables: varsContext, schemas });
+          } else if (schema.type !== 'image' && schema.type !== 'signature') {
+            value = evaluateExpressions({ content: value, variables: varsContext, schemas });
+          }
         }
 
         schema.position = {

@@ -6,6 +6,8 @@ import {
   Size,
   getDynamicTemplate,
   replacePlaceholders,
+  evaluateExpressions,
+  evaluateTableCellExpressions,
 } from '@pdfme/common';
 import { getDynamicHeightsForTable } from '@pdfme/schemas/utils';
 import UnitPager from './UnitPager.js';
@@ -183,13 +185,28 @@ const Preview = ({
           pageSizes={pageSizes}
           backgrounds={backgrounds}
           renderSchema={({ schema, index }) => {
-            const value = schema.readOnly
-              ? replacePlaceholders({
-                  content: schema.content || '',
-                  variables: { ...input, totalPages: schemasList.length, currentPage: index + 1 },
-                  schemas: schemasList,
-                })
-              : String((input && input[schema.name]) || '');
+            let value: string;
+            const varsContext = { ...input, totalPages: schemasList.length, currentPage: index + 1 };
+            if (schema.readOnly) {
+              value = replacePlaceholders({
+                content: schema.content || '',
+                variables: varsContext,
+                schemas: schemasList,
+              });
+            } else {
+              const userInput = input && input[schema.name];
+              const rawSource = userInput ? String(userInput) : (schema.content || '');
+              value = rawSource;
+
+              // Evaluate {{...}} expressions for non-readOnly schemas
+              if (value) {
+                if (schema.type === 'table' || schema.type === 'nestedTable') {
+                  value = evaluateTableCellExpressions({ value, variables: varsContext, schemas: schemasList });
+                } else if (schema.type !== 'image' && schema.type !== 'signature') {
+                  value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
+                }
+              }
+            }
             return (
               <Renderer
                 key={schema.id}
