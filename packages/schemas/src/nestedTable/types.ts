@@ -1,4 +1,4 @@
-import type { Schema } from '@pdfme/common';
+import type { Schema, TableConditionalFormatting } from '@pdfme/common';
 import type { CellStyle } from '../tables/types.js';
 
 export interface NestedHeaderNode {
@@ -16,6 +16,7 @@ export interface NestedTableSchema extends Schema {
   headStyles: CellStyle;
   bodyStyles: CellStyle & { alternateBackgroundColor: string };
   columnStyles: { alignment?: { [leafColIndex: number]: 'left' | 'center' | 'right' } };
+  conditionalFormatting?: TableConditionalFormatting;
 }
 
 export interface HeaderCell {

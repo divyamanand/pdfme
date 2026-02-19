@@ -671,4 +671,48 @@ describe('evaluateTableCellExpressions', () => {
     const result = evaluateTableCellExpressions({ value, variables: {}, schemas: [] });
     expect(JSON.parse(result)).toEqual([[1, 2], [true, false]]);
   });
+
+  it('should evaluate conditionalFormatting rules for specific tokens', () => {
+    const value = '[["Invoice {{amount}} due on {{dueDate}}"]]';
+    const variables = { amount: 1500, dueDate: '2024-01-01' };
+    const result = evaluateTableCellExpressions({
+      value,
+      variables,
+      schemas: [],
+      conditionalFormatting: {
+        '0:0': [
+          {
+            tokenIndex: 0,
+            mode: 'code' as const,
+            compiledExpression: 'amount > 1000 ? "High" : "Low"',
+          },
+        ],
+      },
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed[0][0]).toBe('Invoice High due on 2024-01-01');
+  });
+
+  it('should leave cells without CF rules on the old path', () => {
+    const value = '[["{{2 + 2}}", "{{3 + 3}}"]]';
+    const result = evaluateTableCellExpressions({
+      value,
+      variables: {},
+      schemas: [],
+      conditionalFormatting: {},
+    });
+    expect(JSON.parse(result)).toEqual([['4', '6']]);
+  });
+
+  it('should resolve cross-cell references (A1, B1) in expression context', () => {
+    const value = '[["100", "200", "{{A1 > B1 ? \\"yes\\" : \\"no\\"}}"]]';
+    const result = evaluateTableCellExpressions({
+      value,
+      variables: {},
+      schemas: [],
+    });
+    const parsed = JSON.parse(result);
+    // A1=100, B1=200, so A1 > B1 is false → "no"
+    expect(parsed[0][2]).toBe('no');
+  });
 });

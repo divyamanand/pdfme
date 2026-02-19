@@ -124,7 +124,13 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           // Evaluate {{...}} expressions for non-readOnly schemas
           if (!staticSchema.readOnly && value) {
             if (staticSchema.type === 'table' || staticSchema.type === 'nestedTable') {
-              value = evaluateTableCellExpressions({ value, variables: varsContext, schemas });
+              const tableSchema = staticSchema as any;
+              value = evaluateTableCellExpressions({
+                value,
+                variables: varsContext,
+                schemas,
+                conditionalFormatting: tableSchema.conditionalFormatting,
+              });
             } else if (staticSchema.type !== 'image' && staticSchema.type !== 'signature') {
               value = evaluateExpressions({ content: value, variables: varsContext, schemas });
             }
@@ -193,7 +199,13 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         // Evaluate {{...}} expressions for non-readOnly schemas
         if (!schema.readOnly && value) {
           if (schema.type === 'table' || schema.type === 'nestedTable') {
-            value = evaluateTableCellExpressions({ value, variables: varsContext, schemas });
+            const tableSchema = schema as any;
+            value = evaluateTableCellExpressions({
+              value,
+              variables: varsContext,
+              schemas,
+              conditionalFormatting: tableSchema.conditionalFormatting,
+            });
           } else if (schema.type !== 'image' && schema.type !== 'signature') {
             value = evaluateExpressions({ content: value, variables: varsContext, schemas });
           }

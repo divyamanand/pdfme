@@ -7,6 +7,7 @@ import {
   getColumnStylesPropPanelSchema,
 } from './helper.js';
 import { HEX_COLOR_PATTERN } from '../constants.js';
+import { conditionalFormattingWidget } from './conditionalFormattingWidget.js';
 
 export const propPanel: PropPanel<TableSchema> = {
   schema: ({ activeSchema, options, i18n }) => {
@@ -77,6 +78,14 @@ export const propPanel: PropPanel<TableSchema> = {
         span: 24,
         properties: getColumnStylesPropPanelSchema({ head, i18n }),
       },
+      '----cf': { type: 'void', widget: 'Divider' },
+      conditionalFormatting: {
+        title: 'Cell Conditions',
+        type: 'object',
+        widget: 'ConditionalFormattingEditor',
+        bind: false,
+        span: 24,
+      },
     };
   },
   defaultSchema: {
@@ -107,5 +116,8 @@ export const propPanel: PropPanel<TableSchema> = {
       alternateBackgroundColor: '#f5f5f5',
     }),
     columnStyles: {},
+  },
+  widgets: {
+    ConditionalFormattingEditor: conditionalFormattingWidget,
   },
 };

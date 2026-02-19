@@ -201,7 +201,13 @@ const Preview = ({
               // Evaluate {{...}} expressions for non-readOnly schemas
               if (value) {
                 if (schema.type === 'table' || schema.type === 'nestedTable') {
-                  value = evaluateTableCellExpressions({ value, variables: varsContext, schemas: schemasList });
+                  const tableSchema = schema as any;
+                  value = (evaluateTableCellExpressions as any)({
+                    value,
+                    variables: varsContext,
+                    schemas: schemasList,
+                    conditionalFormatting: tableSchema.conditionalFormatting,
+                  });
                 } else if (schema.type !== 'image' && schema.type !== 'signature') {
                   value = evaluateExpressions({ content: value, variables: varsContext, schemas: schemasList });
                 }

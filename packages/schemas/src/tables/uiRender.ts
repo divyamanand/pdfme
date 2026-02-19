@@ -1,6 +1,6 @@
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import type { TableSchema, CellStyle, Styles } from './types.js';
-import { px2mm, ZOOM } from '@pdfme/common';
+import { px2mm, ZOOM, shiftCFRows, shiftCFCols } from '@pdfme/common';
 import { createSingleTable } from './tableHelper.js';
 import { getBody, getBodyWithRange } from './helper.js';
 import cell from './cell.js';
@@ -265,8 +265,20 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
         right: `-${buttonSize}px`,
         text: '-',
         onClick: () => {
-          const newTableBody = body.filter((_, j) => j !== i + (schema.__bodyRange?.start ?? 0));
-          if (onChange) onChange({ key: 'content', value: JSON.stringify(newTableBody) });
+          const removedRowIndex = i + (schema.__bodyRange?.start ?? 0);
+          const newTableBody = body.filter((_, j) => j !== removedRowIndex);
+          if (onChange) {
+            const changes: Array<{ key: string; value: any }> = [
+              { key: 'content', value: JSON.stringify(newTableBody) },
+            ];
+            if (schema.conditionalFormatting) {
+              changes.push({
+                key: 'conditionalFormatting',
+                value: shiftCFRows(schema.conditionalFormatting, removedRowIndex, -1),
+              });
+            }
+            onChange(changes);
+          }
         },
       });
       return removeRowButton;
@@ -333,7 +345,7 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
           );
 
           // TODO Should also remove the deleted columnStyles when deleting
-          onChange([
+          const colChanges: Array<{ key: string; value: any }> = [
             { key: 'head', value: schema.head.filter((_, j) => j !== i) },
             {
               key: 'headWidthPercentages',
@@ -345,7 +357,14 @@ export const uiRender = async (arg: UIRenderProps<TableSchema>) => {
               key: 'content',
               value: JSON.stringify(bodyWidthRange.map((row) => row.filter((_, j) => j !== i))),
             },
-          ]);
+          ];
+          if (schema.conditionalFormatting) {
+            colChanges.push({
+              key: 'conditionalFormatting',
+              value: shiftCFCols(schema.conditionalFormatting, i, -1),
+            });
+          }
+          onChange(colChanges);
         },
       });
       rootElement.appendChild(removeColumnButton);

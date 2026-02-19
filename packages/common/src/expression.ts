@@ -1,6 +1,12 @@
 import * as acorn from 'acorn';
 import type { Node as AcornNode, Identifier, Property } from 'estree';
 import type { SchemaPageArray } from './types.js';
+import type { TableConditionalFormatting } from './conditionalFormatting.js';
+import {
+  buildCellAddressMap,
+  parseTokens,
+  replaceTokenAtIndex,
+} from './conditionalFormatting.js';
 
 const expressionCache = new Map<string, (context: Record<string, unknown>) => unknown>();
 const parseDataCache = new Map<string, Record<string, unknown>>();
@@ -454,6 +460,28 @@ const buildEvalContext = (
   return context;
 };
 
+/**
+ * Helper: evaluate a single compiled expression string against a context.
+ * Used by conditional formatting to evaluate rule expressions.
+ * Reuses the expression cache and evaluation pipeline.
+ */
+const evaluateCompiledExpression = (code: string, context: Record<string, unknown>): unknown => {
+  if (expressionCache.has(code)) {
+    const evalFunc = expressionCache.get(code)!;
+    return evalFunc(context);
+  }
+
+  try {
+    const ast = acorn.parseExpressionAt(code, 0, { ecmaVersion: 'latest' }) as AcornNode;
+    validateAST(ast);
+    const evalFunc = (ctx: Record<string, unknown>) => evaluateAST(ast, ctx);
+    expressionCache.set(code, evalFunc);
+    return evalFunc(context);
+  } catch {
+    throw new Error(`Failed to evaluate expression: ${code}`);
+  }
+};
+
 export const replacePlaceholders = (arg: {
   content: string;
   variables: Record<string, unknown>;
@@ -556,13 +584,17 @@ export const evaluateExpressions = (arg: {
 /**
  * Evaluates {{...}} expressions in table cell values.
  * Parses a JSON string[][] (table), evaluates each cell independently, and returns stringified result.
+ *
+ * If conditionalFormatting rules are provided, they override the inline {{...}} expressions per token.
+ * Otherwise, existing inline {{...}} evaluation proceeds unchanged (backward compatible).
  */
 export const evaluateTableCellExpressions = (arg: {
   value: string;
   variables: Record<string, unknown>;
   schemas: SchemaPageArray;
+  conditionalFormatting?: TableConditionalFormatting;
 }): string => {
-  const { value, variables, schemas } = arg;
+  const { value, variables, schemas, conditionalFormatting } = arg;
 
   // Fast exit: no double-brace markers
   if (!value || typeof value !== 'string' || !value.includes('{{')) {
@@ -570,14 +602,59 @@ export const evaluateTableCellExpressions = (arg: {
   }
 
   try {
-    const rows = JSON.parse(value) as unknown[][];
+    const rows = JSON.parse(value) as string[][];
 
-    const evaluatedRows = rows.map((row) =>
-      row.map((cell) => {
+    // Build cell address map from raw values (for cross-cell references like A1, B2)
+    const cellAddressMap = buildCellAddressMap(rows);
+    const augmentedVariables = { ...variables, ...cellAddressMap };
+
+    const evaluatedRows = rows.map((row, rowIndex) =>
+      row.map((cell, colIndex) => {
         if (typeof cell !== 'string') {
           return cell;
         }
-        return evaluateExpressions({ content: cell, variables, schemas });
+
+        const cellKey = `${rowIndex}:${colIndex}` as any;
+        const tokenRules = conditionalFormatting?.[cellKey as any];
+
+        // If no conditional formatting rules for this cell, use old path (backward compatible)
+        if (!tokenRules || tokenRules.length === 0) {
+          return evaluateExpressions({
+            content: cell,
+            variables: augmentedVariables,
+            schemas,
+          });
+        }
+
+        // CONDITIONAL FORMATTING PATH
+        // Process cell token-by-token, applying rules as needed
+        const tokens = parseTokens(cell);
+        let resultCell = cell;
+
+        // Apply rules in reverse order (right-to-left) to keep string offsets stable
+        const sortedRules = [...tokenRules].sort((a: any, b: any) => b.tokenIndex - a.tokenIndex);
+
+        for (const rule of sortedRules) {
+          if (rule.tokenIndex >= tokens.length || rule.tokenIndex < 0) {
+            continue; // Skip out-of-range rules
+          }
+
+          try {
+            // Evaluate the compiled expression in the augmented context
+            const evalContext = buildEvalContext(augmentedVariables, schemas);
+            const ruleResult = evaluateCompiledExpression(rule.compiledExpression, evalContext);
+            resultCell = replaceTokenAtIndex(resultCell, rule.tokenIndex, String(ruleResult ?? ''));
+          } catch {
+            // On error, leave the token unchanged (fail-safe)
+          }
+        }
+
+        // Evaluate any remaining {{...}} tokens (not covered by rules)
+        return evaluateExpressions({
+          content: resultCell,
+          variables: augmentedVariables,
+          schemas,
+        });
       }),
     );
 

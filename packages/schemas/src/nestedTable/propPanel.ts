@@ -1,6 +1,6 @@
 import type { PropPanel } from '@pdfme/common';
 import type { NestedTableSchema, NestedHeaderNode } from './types.js';
-import { getFallbackFontName, DEFAULT_FONT_NAME } from '@pdfme/common';
+import { getFallbackFontName, DEFAULT_FONT_NAME, shiftCFCols } from '@pdfme/common';
 import {
   getDefaultCellStyles,
   getCellPropPanelSchema,
@@ -14,6 +14,7 @@ import {
   generateNodeId,
   getLeafNodes,
 } from './treeUtils.js';
+import { conditionalFormattingWidget } from '../tables/conditionalFormattingWidget.js';
 
 export const propPanel: PropPanel<NestedTableSchema> = {
   schema: ({ activeSchema, options, i18n }) => {
@@ -90,6 +91,14 @@ export const propPanel: PropPanel<NestedTableSchema> = {
         widget: 'NestedHeaderTreeEditor',
         span: 24,
       },
+      '----cf': { type: 'void', widget: 'Divider' },
+      conditionalFormatting: {
+        title: 'Cell Conditions',
+        type: 'object',
+        widget: 'ConditionalFormattingEditor',
+        bind: false,
+        span: 24,
+      },
     };
   },
   defaultSchema: {
@@ -146,6 +155,7 @@ export const propPanel: PropPanel<NestedTableSchema> = {
     columnStyles: {},
   },
   widgets: {
+    ConditionalFormattingEditor: conditionalFormattingWidget,
     NestedHeaderTreeEditor: ({ rootElement, changeSchemas, activeSchema }) => {
       const schema = activeSchema as unknown as NestedTableSchema;
 
@@ -224,10 +234,18 @@ export const propPanel: PropPanel<NestedTableSchema> = {
               return newRow;
             });
 
-            changeSchemas([
+            const changes: Array<{ key: string; value: any; schemaId: string }> = [
               { key: 'headerTree', value: newTree, schemaId: activeSchema.id },
               { key: 'content', value: JSON.stringify(newBody), schemaId: activeSchema.id },
-            ]);
+            ];
+            if (leafIndex >= 0 && schema.conditionalFormatting) {
+              changes.push({
+                key: 'conditionalFormatting',
+                value: shiftCFCols(schema.conditionalFormatting, leafIndex, -1),
+                schemaId: activeSchema.id,
+              });
+            }
+            changeSchemas(changes);
           });
 
           nodeDiv.appendChild(removeBtn);

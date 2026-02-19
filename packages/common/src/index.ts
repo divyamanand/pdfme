@@ -66,6 +66,26 @@ import {
 import { getDynamicTemplate } from './dynamicTemplate.js';
 import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions } from './expression.js';
 import { pluginRegistry } from './pluginRegistry.js';
+import {
+  colIndexToLetter,
+  colLetterToIndex,
+  parseCellRef,
+  buildCellAddressMap,
+  parseTokens,
+  replaceTokenAtIndex,
+  compileVisualRulesToExpression,
+  tryParseExpressionToVisualRule,
+  shiftCFRows,
+  shiftCFCols,
+} from './conditionalFormatting.js';
+import type {
+  ConditionOperator,
+  VisualConditionBranch,
+  VisualRule,
+  CellTokenRule,
+  CellKey,
+  TableConditionalFormatting,
+} from './conditionalFormatting.js';
 
 export {
   PDFME_VERSION,
@@ -93,6 +113,16 @@ export {
   replacePlaceholders,
   evaluateExpressions,
   evaluateTableCellExpressions,
+  colIndexToLetter,
+  colLetterToIndex,
+  parseCellRef,
+  buildCellAddressMap,
+  parseTokens,
+  replaceTokenAtIndex,
+  compileVisualRulesToExpression,
+  tryParseExpressionToVisualRule,
+  shiftCFRows,
+  shiftCFCols,
   checkFont,
   checkInputs,
   checkUIOptions,
@@ -135,4 +165,10 @@ export type {
   PDFRenderProps,
   UIRenderProps,
   Mode,
+  ConditionOperator,
+  VisualConditionBranch,
+  VisualRule,
+  CellTokenRule,
+  CellKey,
+  TableConditionalFormatting,
 };

@@ -1,7 +1,7 @@
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import type { NestedTableSchema } from './types.js';
 import type { Styles } from '../tables/types.js';
-import { px2mm, ZOOM } from '@pdfme/common';
+import { px2mm, ZOOM, shiftCFRows, shiftCFCols } from '@pdfme/common';
 import { createSingleTable } from '../tables/tableHelper.js';
 import { getBody, getBodyWithRange } from '../tables/helper.js';
 import cell from '../tables/cell.js';
@@ -370,10 +370,20 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
         right: `-${buttonSize}px`,
         text: '-',
         onClick: () => {
-          const newBody = body.filter(
-            (_, j) => j !== i + (schema.__bodyRange?.start ?? 0),
-          );
-          if (onChange) onChange({ key: 'content', value: JSON.stringify(newBody) });
+          const removedRowIndex = i + (schema.__bodyRange?.start ?? 0);
+          const newBody = body.filter((_, j) => j !== removedRowIndex);
+          if (onChange) {
+            const changes: Array<{ key: string; value: any }> = [
+              { key: 'content', value: JSON.stringify(newBody) },
+            ];
+            if (schema.conditionalFormatting) {
+              changes.push({
+                key: 'conditionalFormatting',
+                value: shiftCFRows(schema.conditionalFormatting, removedRowIndex, -1),
+              });
+            }
+            onChange(changes);
+          }
         },
       });
     });
