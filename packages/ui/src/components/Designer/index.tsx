@@ -441,18 +441,23 @@ const TemplateEditor = ({
         updatedSettings.padding = newPadding;
         updatedSettings.backgroundColor = newBgColor || undefined;
 
-        // Clone basePdf with updated pageSettings to ensure React detects the change
+        // Clone basePdf with updated pageSettings
         const newPageSettings = [...basePdf.pageSettings];
         newPageSettings[pageCursor] = updatedSettings;
         const newBasePdf = { ...basePdf, pageSettings: newPageSettings };
 
-        // Update the template's basePdf reference
+        // Update template's basePdf in-place
         template.basePdf = newBasePdf;
-
         const newTemplate = schemasList2template(schemasList, newBasePdf);
-        // Set prevTemplate to prevent updateTemplate from resetting page cursor
-        setPrevTemplate(newTemplate);
+
+        // Notify parent of the change
         onChangeTemplate(newTemplate);
+
+        // Force re-render: create new schemasList identity so React re-renders
+        // Canvas with the updated basePdf. Also set prevTemplate to the current
+        // template ref to prevent updateTemplate (which resets pageCursor to 0).
+        setPrevTemplate(template);
+        setSchemasList([...schemasList]);
         void refresh(newTemplate);
       },
     });
