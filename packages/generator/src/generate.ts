@@ -9,7 +9,7 @@ import {
   evaluateExpressions,
   evaluateTableCellExpressions,
   evaluateSchemaConditionalFormatting,
-  buildTableCellContext,
+  buildCFAwareCellContext,
   pt2mm,
   cloneDeep,
 } from '@pdfme/common';
@@ -128,7 +128,7 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
       }
 
       // Build table cell context so other plugins can reference table cells as fieldName.A1
-      const tableCellContext = buildTableCellContext(schemas as any, input);
+      const tableCellContext = buildCFAwareCellContext(schemas as any, input);
 
       if (isBlankPdf(basePdf) && basePdf.staticSchema) {
         for (let k = 0; k < basePdf.staticSchema.length; k += 1) {

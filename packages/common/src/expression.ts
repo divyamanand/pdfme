@@ -492,6 +492,76 @@ export const buildTableCellContext = (
   return result;
 };
 
+/**
+ * CF-aware version of buildTableCellContext.
+ * Evaluates each table schema's cells through its CF rules first,
+ * then builds the cell address map from the CF-evaluated output.
+ * This ensures {{tableName.A1}} returns the CF-transformed value, not raw input.
+ */
+export const buildCFAwareCellContext = (
+  schemas: SchemaPageArray,
+  input: Record<string, unknown>,
+): Record<string, Record<string, string>> => {
+  const rawContext = buildTableCellContext(schemas, input);
+  const result: Record<string, Record<string, string>> = {};
+
+  for (const page of schemas) {
+    for (const schema of page) {
+      if (schema.type !== 'table' && schema.type !== 'nestedTable') continue;
+
+      const rawInput = input[schema.name];
+      let tableValue: string;
+      if (typeof rawInput === 'string') {
+        tableValue = rawInput;
+      } else if (typeof rawInput === 'object' && rawInput !== null) {
+        tableValue = JSON.stringify(rawInput);
+      } else {
+        tableValue = (schema as any).content || '';
+      }
+
+      const cfResult = evaluateTableCellExpressions({
+        value: tableValue,
+        variables: { ...input, ...rawContext },
+        schemas,
+        conditionalFormatting: (schema as any).conditionalFormatting,
+      });
+
+      try {
+        const evaluatedRows = JSON.parse(cfResult.value) as string[][];
+        if (Array.isArray(evaluatedRows)) {
+          result[schema.name] = buildCellAddressMap(evaluatedRows);
+        }
+      } catch {
+        result[schema.name] = rawContext[schema.name] || {};
+      }
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Aggregate functions injected into every expression evaluation context.
+ * Work with individual cell values: sum(A1, A2, A3), avg(B1, B2), etc.
+ */
+export const aggFunctions: Record<string, (...args: unknown[]) => number> = {
+  sum: (...args) => args.reduce<number>((acc, v) => acc + (Number(v) || 0), 0),
+  min: (...args) => {
+    const nums = args.map(Number).filter(isFinite);
+    return nums.length ? Math.min(...nums) : 0;
+  },
+  max: (...args) => {
+    const nums = args.map(Number).filter(isFinite);
+    return nums.length ? Math.max(...nums) : 0;
+  },
+  avg: (...args) => {
+    const nums = args.map(Number).filter(isFinite);
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  },
+  product: (...args) => args.reduce<number>((acc, v) => acc * (Number(v) || 0), 1),
+  count: (...args) => args.filter((v) => v !== '' && v !== null && v !== undefined).length,
+};
+
 // Helper to build evaluation context shared by both replacePlaceholders and evaluateExpressions
 const buildEvalContext = (
   variables: Record<string, unknown>,
@@ -513,6 +583,7 @@ const buildEvalContext = (
     date: formattedDate,
     dateTime: formattedDateTime,
     ...parsedInput,
+    ...aggFunctions,
   };
 
   Object.entries(context).forEach(([key, value]) => {

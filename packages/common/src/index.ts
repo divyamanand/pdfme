@@ -66,7 +66,7 @@ import {
   getPageBackgroundColor,
 } from './helper.js';
 import { getDynamicTemplate } from './dynamicTemplate.js';
-import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions, evaluateSchemaConditionalFormatting, buildTableCellContext } from './expression.js';
+import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions, evaluateSchemaConditionalFormatting, buildTableCellContext, buildCFAwareCellContext, aggFunctions } from './expression.js';
 import { pluginRegistry } from './pluginRegistry.js';
 import {
   colIndexToLetter,
@@ -77,6 +77,8 @@ import {
   replaceTokenAtIndex,
   compileVisualRulesToExpression,
   compileCondition,
+  compileClause,
+  getBranchClauses,
   tryParseExpressionToVisualRule,
   shiftRule,
   shiftCFRows,
@@ -89,6 +91,7 @@ import {
 } from './conditionalFormatting.js';
 import type {
   ConditionOperator,
+  ConditionClause,
   VisualConditionBranch,
   VisualRule,
   ConditionalRule,
@@ -131,6 +134,8 @@ export {
   evaluateTableCellExpressions,
   evaluateSchemaConditionalFormatting,
   buildTableCellContext,
+  buildCFAwareCellContext,
+  aggFunctions,
   colIndexToLetter,
   colLetterToIndex,
   parseCellRef,
@@ -146,6 +151,8 @@ export {
   resolveRulesForCell,
   migrateLegacyCF,
   compileCondition,
+  compileClause,
+  getBranchClauses,
   resolveValueType,
   emitValue,
   checkFont,
@@ -191,6 +198,7 @@ export type {
   UIRenderProps,
   Mode,
   ConditionOperator,
+  ConditionClause,
   VisualConditionBranch,
   VisualRule,
   ConditionalRule,

@@ -5,6 +5,8 @@ import type {
   TableConditionalFormatting,
   ConditionalRule,
   VisualRule,
+  VisualConditionBranch,
+  ConditionClause,
   ConditionOperator,
   ChangeSchemas,
   SchemaForUI,
@@ -17,8 +19,8 @@ import {
   shiftRule,
   resolveRulesForCell,
   resolveValueType,
+  getBranchClauses,
 } from '@pdfme/common';
-import type { VisualConditionBranch } from '@pdfme/common';
 import { I18nContext } from '../../contexts.js';
 
 const OPERATORS: { value: ConditionOperator; label: string }[] = [
@@ -36,6 +38,15 @@ const OPERATORS: { value: ConditionOperator; label: string }[] = [
 ];
 
 const BUILTINS = ['currentDate', 'currentTime', 'currentPage', 'totalPages', 'date', 'dateTime'];
+
+const AGG_FUNCTIONS = [
+  { name: 'sum',     hint: 'sum(A1, A2, ...)' },
+  { name: 'min',     hint: 'min(A1, A2, ...)' },
+  { name: 'max',     hint: 'max(A1, A2, ...)' },
+  { name: 'avg',     hint: 'avg(A1, A2, ...)' },
+  { name: 'product', hint: 'product(A1, A2, ...)' },
+  { name: 'count',   hint: 'count(A1, A2, ...)' },
+];
 
 const VALUE_TYPE_OPTIONS: { value: CFValueType; label: string }[] = [
   { value: 'text', label: 'Text' },
@@ -277,6 +288,21 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
   // For non-table schemas, the rule is stored directly on schema.conditionalFormatting
   const nonTableRule: ConditionalRule | undefined = !isTable ? selectedSchema?.conditionalFormatting : undefined;
 
+  // Auto-detect scope from existing CF rules when selected cell or cf changes
+  useEffect(() => {
+    if (!isTable) return;
+    const cellKey = `${selectedRow}:${selectedCol}`;
+    if (cf[cellKey]) {
+      setScope('cell');
+    } else if (cf[`*:${selectedCol}`]) {
+      setScope('column');
+    } else if (cf[`${selectedRow}:*`]) {
+      setScope('row');
+    } else {
+      setScope('cell');
+    }
+  }, [selectedRow, selectedCol, cf, isTable]);
+
   // Helper: get CF rule for a table cell
   const getCFRule = (r: number = selectedRow, c: number = selectedCol): ConditionalRule | undefined => {
     return resolveRulesForCell(cf, r, c);
@@ -303,6 +329,8 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
     }
     // Builtins
     for (const b of BUILTINS) add(b, `${b} (builtin)`);
+    // Aggregate functions
+    for (const { name, hint } of AGG_FUNCTIONS) add(name, `${hint} (aggregate)`);
     // Current table cell refs (if table)
     if (isTable) {
       for (let r = 0; r < numRows; r++) {
@@ -343,24 +371,18 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
         const key = `${selectedRow}:${selectedCol}`;
         updatedCF[key] = newRule;
       } else if (scope === 'column') {
-        const wildcardRule: ConditionalRule = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
-        const wcKey = `*:${selectedCol}`;
-        updatedCF[wcKey] = wildcardRule;
-        // Also apply to all existing rows
+        // Store only the wildcard; resolveRulesForCell shifts it at eval time
+        updatedCF[`*:${selectedCol}`] = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
+        // Clear any individual cell rules for this column so wildcard takes effect
         for (let r = 0; r < numRows; r++) {
-          const key = `${r}:${selectedCol}`;
-          const rowDelta = r - selectedRow;
-          updatedCF[key] = rowDelta === 0 ? newRule : shiftRule(newRule, rowDelta, 0);
+          delete updatedCF[`${r}:${selectedCol}`];
         }
       } else if (scope === 'row') {
-        const wildcardRule: ConditionalRule = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
-        const wcKey = `${selectedRow}:*`;
-        updatedCF[wcKey] = wildcardRule;
-        // Also apply to all existing cols
+        // Store only the wildcard; resolveRulesForCell shifts it at eval time
+        updatedCF[`${selectedRow}:*`] = { ...newRule, sourceRow: selectedRow, sourceCol: selectedCol };
+        // Clear any individual cell rules for this row so wildcard takes effect
         for (let c = 0; c < numCols; c++) {
-          const key = `${selectedRow}:${c}`;
-          const colDelta = c - selectedCol;
-          updatedCF[key] = colDelta === 0 ? newRule : shiftRule(newRule, 0, colDelta);
+          delete updatedCF[`${selectedRow}:${c}`];
         }
       }
 
@@ -681,9 +703,57 @@ interface VisualRuleEditorProps {
 }
 
 const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange, onSave, onClear, autocompleteOptions }) => {
+  // Update a result/style field on a branch (non-clause fields)
   const updateBranch = (idx: number, field: keyof VisualConditionBranch, value: any) => {
     const newBranches = [...rule.branches];
     (newBranches[idx] as any)[field] = value;
+    onRuleChange({ ...rule, branches: newBranches });
+  };
+
+  // Update a specific condition clause within a branch
+  const updateClause = (branchIdx: number, clauseIdx: number, field: keyof ConditionClause, value: any) => {
+    const newBranches = [...rule.branches];
+    const branch = { ...newBranches[branchIdx] };
+    const clauses = getBranchClauses(branch).map((c, i) =>
+      i === clauseIdx ? { ...c, [field]: value } : c
+    );
+    // Sync legacy fields from first clause for backward compat
+    branch.conditions = clauses;
+    branch.field = clauses[0].field;
+    branch.operator = clauses[0].operator;
+    branch.value = clauses[0].value;
+    branch.valueIsVariable = clauses[0].valueIsVariable;
+    branch.valueType = clauses[0].valueType;
+    newBranches[branchIdx] = branch;
+    onRuleChange({ ...rule, branches: newBranches });
+  };
+
+  // Add a new clause to a branch (new clauses default to AND connector)
+  const addClause = (branchIdx: number) => {
+    const newBranches = [...rule.branches];
+    const branch = { ...newBranches[branchIdx] };
+    branch.conditions = [
+      ...getBranchClauses(branch),
+      { field: '', operator: '==' as ConditionOperator, value: '', valueType: 'text' as CFValueType, logic: 'AND' as const },
+    ];
+    newBranches[branchIdx] = branch;
+    onRuleChange({ ...rule, branches: newBranches });
+  };
+
+  // Remove a clause from a branch (only when >1 clauses exist)
+  const removeClause = (branchIdx: number, clauseIdx: number) => {
+    const newBranches = [...rule.branches];
+    const branch = { ...newBranches[branchIdx] };
+    const clauses = getBranchClauses(branch).filter((_, i) => i !== clauseIdx);
+    branch.conditions = clauses;
+    if (clauses.length > 0) {
+      branch.field = clauses[0].field;
+      branch.operator = clauses[0].operator;
+      branch.value = clauses[0].value;
+      branch.valueIsVariable = clauses[0].valueIsVariable;
+      branch.valueType = clauses[0].valueType;
+    }
+    newBranches[branchIdx] = branch;
     onRuleChange({ ...rule, branches: newBranches });
   };
 
@@ -691,17 +761,16 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
     onRuleChange({
       ...rule,
       branches: [...rule.branches, {
-        field: '', operator: '==', value: '', result: '',
+        conditions: [{ field: '', operator: '==' as ConditionOperator, value: '', valueType: 'text' as CFValueType }],
+        conditionLogic: 'AND' as const,
+        field: '', operator: '==' as ConditionOperator, value: '', result: '',
         valueType: 'text' as CFValueType, resultType: 'text' as CFValueType,
       }],
     });
   };
 
   const removeBranch = (idx: number) => {
-    onRuleChange({
-      ...rule,
-      branches: rule.branches.filter((_, i) => i !== idx),
-    });
+    onRuleChange({ ...rule, branches: rule.branches.filter((_, i) => i !== idx) });
   };
 
   const preview = compileVisualRulesToExpression(rule);
@@ -711,81 +780,116 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
 
   return (
     <div>
-      {rule.branches.map((branch, idx) => {
-        const vType = resolveValueType(branch.value, branch.valueIsVariable, branch.valueType);
+      {rule.branches.map((branch, branchIdx) => {
+        const clauses = getBranchClauses(branch);
         const rType = resolveValueType(branch.result, branch.resultIsVariable, branch.resultType);
         return (
-          <div key={idx} style={{ marginBottom: 10, padding: 10, backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d6e4ff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <div key={branchIdx} style={{ marginBottom: 10, padding: 10, backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d6e4ff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            {/* Branch header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#1890ff' }}>
-                {idx === 0 ? 'IF' : `ELSE IF #${idx + 1}`}
+                {branchIdx === 0 ? 'IF' : `ELSE IF #${branchIdx + 1}`}
               </span>
-              <Button
-                type="text"
-                danger
-                size="small"
-                onClick={() => removeBranch(idx)}
-                icon={<DeleteOutlined />}
-              />
+              <Button type="text" danger size="small" onClick={() => removeBranch(branchIdx)} icon={<DeleteOutlined />} />
             </div>
-            {/* Condition row */}
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-              <AutoComplete
-                options={autocompleteOptions}
-                filterOption={filterOption}
-                value={branch.field}
-                onSelect={(val) => updateBranch(idx, 'field', val)}
-                onChange={(val) => updateBranch(idx, 'field', val)}
-                placeholder="field"
-                style={{ width: 100, fontSize: 11 }}
-                size="small"
-              />
-              <Select
-                size="small"
-                value={branch.operator}
-                onChange={(val) => updateBranch(idx, 'operator', val as ConditionOperator)}
-                style={{ width: 100, fontSize: 11 }}
-                options={OPERATORS}
-              />
-              {!['isEmpty', 'isNotEmpty'].includes(branch.operator) && (
-                <>
-                  <TypeSelector
-                    value={vType}
-                    onChange={(t) => {
-                      updateBranch(idx, 'valueType', t);
-                      updateBranch(idx, 'valueIsVariable', t === 'variable' || t === 'field');
-                    }}
-                  />
-                  <ValueInput
-                    value={branch.value}
-                    valueType={vType}
-                    onChange={(val) => {
-                      updateBranch(idx, 'value', val);
-                      updateBranch(idx, 'valueIsVariable', vType === 'variable' || vType === 'field');
-                    }}
-                    autocompleteOptions={autocompleteOptions}
-                    filterOption={filterOption}
-                    placeholder="value"
-                  />
-                </>
-              )}
-            </div>
+
+            {/* Condition clauses */}
+            {clauses.map((clause, clauseIdx) => {
+              const vType = resolveValueType(clause.value, clause.valueIsVariable, clause.valueType);
+              return (
+                <div key={clauseIdx}>
+                  {/* AND / OR connector — per-clause, each can be independently AND or OR */}
+                  {clauseIdx > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '3px 0' }}>
+                      <Select
+                        size="small"
+                        value={clause.logic ?? 'AND'}
+                        onChange={(val) => updateClause(branchIdx, clauseIdx, 'logic', val as 'AND' | 'OR')}
+                        options={[{ value: 'AND', label: 'AND' }, { value: 'OR', label: 'OR' }]}
+                        style={{ width: 68 }}
+                      />
+                    </div>
+                  )}
+                  {/* Clause row */}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
+                    <AutoComplete
+                      options={autocompleteOptions}
+                      filterOption={filterOption}
+                      value={clause.field}
+                      onSelect={(val) => updateClause(branchIdx, clauseIdx, 'field', val)}
+                      onChange={(val) => updateClause(branchIdx, clauseIdx, 'field', val)}
+                      placeholder="field"
+                      style={{ width: 100, fontSize: 11 }}
+                      size="small"
+                    />
+                    <Select
+                      size="small"
+                      value={clause.operator}
+                      onChange={(val) => updateClause(branchIdx, clauseIdx, 'operator', val as ConditionOperator)}
+                      style={{ width: 100, fontSize: 11 }}
+                      options={OPERATORS}
+                    />
+                    {!['isEmpty', 'isNotEmpty'].includes(clause.operator) && (
+                      <>
+                        <TypeSelector
+                          value={vType}
+                          onChange={(t) => {
+                            updateClause(branchIdx, clauseIdx, 'valueType', t);
+                            updateClause(branchIdx, clauseIdx, 'valueIsVariable', t === 'variable' || t === 'field');
+                          }}
+                        />
+                        <ValueInput
+                          value={clause.value}
+                          valueType={vType}
+                          onChange={(val) => {
+                            updateClause(branchIdx, clauseIdx, 'value', val);
+                            updateClause(branchIdx, clauseIdx, 'valueIsVariable', vType === 'variable' || vType === 'field');
+                          }}
+                          autocompleteOptions={autocompleteOptions}
+                          filterOption={filterOption}
+                          placeholder="value"
+                        />
+                      </>
+                    )}
+                    {/* Remove clause button (only shown when >1 clauses) */}
+                    {clauses.length > 1 && (
+                      <Button
+                        type="text" danger size="small"
+                        onClick={() => removeClause(branchIdx, clauseIdx)}
+                        icon={<DeleteOutlined />}
+                        title="Remove condition"
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Add another condition */}
+            <Button
+              size="small" type="dashed"
+              onClick={() => addClause(branchIdx)}
+              style={{ marginBottom: 8, fontSize: 10 }}
+            >
+              + AND/OR Condition
+            </Button>
+
             {/* Result row */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ fontSize: 10, color: '#666', fontWeight: 600 }}>THEN</span>
               <TypeSelector
                 value={rType}
                 onChange={(t) => {
-                  updateBranch(idx, 'resultType', t);
-                  updateBranch(idx, 'resultIsVariable', t === 'variable' || t === 'field');
+                  updateBranch(branchIdx, 'resultType', t);
+                  updateBranch(branchIdx, 'resultIsVariable', t === 'variable' || t === 'field');
                 }}
               />
               <ValueInput
                 value={branch.result}
                 valueType={rType}
                 onChange={(val) => {
-                  updateBranch(idx, 'result', val);
-                  updateBranch(idx, 'resultIsVariable', rType === 'variable' || rType === 'field');
+                  updateBranch(branchIdx, 'result', val);
+                  updateBranch(branchIdx, 'resultIsVariable', rType === 'variable' || rType === 'field');
                 }}
                 autocompleteOptions={autocompleteOptions}
                 filterOption={filterOption}
@@ -796,9 +900,9 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
               styles={branch.styles}
               prefix={branch.prefix}
               suffix={branch.suffix}
-              onChange={(s) => updateBranch(idx, 'styles', s)}
-              onPrefixChange={(v) => updateBranch(idx, 'prefix', v)}
-              onSuffixChange={(v) => updateBranch(idx, 'suffix', v)}
+              onChange={(s) => updateBranch(branchIdx, 'styles', s)}
+              onPrefixChange={(v) => updateBranch(branchIdx, 'prefix', v)}
+              onSuffixChange={(v) => updateBranch(branchIdx, 'suffix', v)}
             />
           </div>
         );

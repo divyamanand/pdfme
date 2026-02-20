@@ -15,7 +15,7 @@ const ExpressionWidget = (props: PropPanelWidgetProps) => {
     'font-family:monospace;font-size:13px;padding:6px 8px;' +
     'border:1px solid #d9d9d9;border-radius:4px;min-height:56px;' +
     'resize:vertical;width:100%;box-sizing:border-box;';
-  textarea.placeholder = 'e.g. Number(price) * quantity';
+  textarea.placeholder = 'e.g. sum(table1.A1, table1.A2, table1.A3)';
 
   const currentContent = (activeSchema as unknown as ExpressionFieldSchema)?.content || '';
   textarea.value = currentContent.replace(/^\{\{/, '').replace(/\}\}$/, '');
@@ -31,9 +31,11 @@ const ExpressionWidget = (props: PropPanelWidgetProps) => {
   // Hint
   const hint = document.createElement('small');
   hint.style.cssText = 'color:#888;font-size:11px;line-height:1.4;';
-  hint.textContent =
-    'Built-ins: date, dateTime, currentPage, totalPages. ' +
-    'Use input field names for calculations.';
+  hint.innerHTML =
+    '<b>Aggregates:</b> sum, min, max, avg, product, count — pass cell refs as args, e.g. <code>sum(table1.A1, table1.A2)</code><br>' +
+    '<b>Built-ins:</b> date, dateTime, currentPage, totalPages<br>' +
+    '<b>Math:</b> Math.round(), Math.abs(), Math.pow() …<br>' +
+    'Use input field names directly as variables.';
   container.appendChild(hint);
 
   rootElement.appendChild(container);

@@ -23,7 +23,7 @@ import {
   evaluateExpressions,
   evaluateTableCellExpressions,
   evaluateSchemaConditionalFormatting,
-  buildTableCellContext,
+  buildCFAwareCellContext,
 } from '@pdfme/common';
 import { PluginsRegistry } from '../../../contexts.js';
 import { X } from 'lucide-react';
@@ -536,7 +536,7 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
 
           const content = schema.content || '';
           let value = content;
-          const tableCellCtx = buildTableCellContext(schemasList as any,
+          const tableCellCtx = buildCFAwareCellContext(schemasList as any,
             schemasList.flat().reduce((acc, s) => { acc[s.name] = s.content || ''; return acc; }, {} as Record<string, string>)
           );
           const variables = {

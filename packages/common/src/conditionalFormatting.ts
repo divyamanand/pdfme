@@ -70,20 +70,55 @@ export interface TableCFEvaluationResult {
 }
 
 /**
- * One IF branch: field operator value → result
- * Evaluated left-to-right; first match wins.
+ * A single condition clause within a branch (field op value).
+ * Multiple clauses can be joined with AND (&&) or OR (||) per-clause.
  */
-export interface VisualConditionBranch {
-  /** Left-hand operand: field name, cell ref (A1), or special (currentDate, currentPage, etc.) */
+export interface ConditionClause {
   field: string;
   operator: ConditionOperator;
   /** Right-hand operand (unused for isEmpty/isNotEmpty) */
   value: string;
-  /** If true, value is a variable reference (emitted unquoted); otherwise treated as a literal */
+  /** If true, value is a variable reference (emitted unquoted) */
   valueIsVariable?: boolean;
+  /** Explicit value type (overrides valueIsVariable heuristic) */
+  valueType?: CFValueType;
+  /**
+   * Logical operator connecting THIS clause to the PREVIOUS clause.
+   * Undefined (or absent) for the first clause. 'AND' = &&, 'OR' = ||.
+   * Falls back to branch.conditionLogic for backward compat.
+   */
+  logic?: 'AND' | 'OR';
+}
+
+/**
+ * One IF branch: one or more conditions → result.
+ * Evaluated left-to-right; first match wins.
+ */
+export interface VisualConditionBranch {
+  /**
+   * Multiple conditions for this branch (AND/OR combined).
+   * When present and non-empty, supersedes the legacy single-condition fields below.
+   */
+  conditions?: ConditionClause[];
+  /** How to combine multiple conditions: 'AND' (default) or 'OR' */
+  conditionLogic?: 'AND' | 'OR';
+
+  // Legacy single-condition fields — kept for backward compatibility.
+  // When `conditions` is absent, these define the single condition.
+  /** @deprecated Use conditions array instead */
+  field?: string;
+  /** @deprecated Use conditions array instead */
+  operator?: ConditionOperator;
+  /** @deprecated Use conditions array instead */
+  value?: string;
+  /** @deprecated Use conditions array instead */
+  valueIsVariable?: boolean;
+  /** @deprecated Use conditions array instead */
+  valueType?: CFValueType;
+
   /** String value to emit when this branch condition is true */
   result: string;
-  /** If true, result is a variable reference (emitted unquoted); otherwise treated as a quoted string */
+  /** If true, result is a variable reference (emitted unquoted) */
   resultIsVariable?: boolean;
   /** Optional style overrides when this branch matches */
   styles?: CFStyleOverrides;
@@ -91,8 +126,6 @@ export interface VisualConditionBranch {
   prefix?: string;
   /** Text to append after the result value */
   suffix?: string;
-  /** Type of the condition value */
-  valueType?: CFValueType;
   /** Type of the result value */
   resultType?: CFValueType;
 }
@@ -353,46 +386,70 @@ export function compileVisualRulesToExpression(rule: VisualRule): string {
 }
 
 /**
- * Helper: compile a single VisualConditionBranch's condition to JS.
+ * Normalise a VisualConditionBranch into a ConditionClause array.
+ * Supports both the new `conditions` array format and the legacy single-condition fields.
+ */
+export function getBranchClauses(branch: VisualConditionBranch): ConditionClause[] {
+  if (branch.conditions && branch.conditions.length > 0) return branch.conditions;
+  // Legacy fallback
+  return [{
+    field: branch.field ?? '',
+    operator: branch.operator ?? '==',
+    value: branch.value ?? '',
+    valueIsVariable: branch.valueIsVariable,
+    valueType: branch.valueType,
+  }];
+}
+
+/**
+ * Compile a single ConditionClause to a JS boolean expression string.
+ */
+export function compileClause(clause: ConditionClause): string {
+  const { field, operator, value, valueIsVariable, valueType } = clause;
+  const vType = resolveValueType(value, valueIsVariable, valueType);
+  const ev = (val: string) => emitValue(val, vType);
+  const fieldExpr = vType === 'dateTime' ? `Date.parse(${field})` : field;
+  const stringMethodValue = (val: string) =>
+    (vType === 'variable' || vType === 'field') ? val : JSON.stringify(val);
+
+  switch (operator) {
+    case '==':        return `${fieldExpr} == ${ev(value)}`;
+    case '!=':        return `${fieldExpr} != ${ev(value)}`;
+    case '<':         return `${fieldExpr} < ${ev(value)}`;
+    case '<=':        return `${fieldExpr} <= ${ev(value)}`;
+    case '>':         return `${fieldExpr} > ${ev(value)}`;
+    case '>=':        return `${fieldExpr} >= ${ev(value)}`;
+    case 'contains':  return `String(${field}).includes(${stringMethodValue(value)})`;
+    case 'startsWith':return `String(${field}).startsWith(${stringMethodValue(value)})`;
+    case 'endsWith':  return `String(${field}).endsWith(${stringMethodValue(value)})`;
+    case 'isEmpty':   return `!${field}`;
+    case 'isNotEmpty':return `!!${field}`;
+    default:          return '';
+  }
+}
+
+/**
+ * Compile all conditions of a branch into a single JS boolean expression.
+ * Each clause (from index 1 onward) carries its own `logic` connector ('AND'/'OR').
+ * Falls back to branch.conditionLogic for backward compat with clauses that have no `logic`.
  */
 export function compileCondition(branch: VisualConditionBranch): string {
-  const field = branch.field;
-  const valueType = resolveValueType(branch.value, branch.valueIsVariable, branch.valueType);
-  const ev = (val: string) => emitValue(val, valueType);
+  const clauses = getBranchClauses(branch);
+  const compiled = clauses.map(compileClause);
+  const parts = compiled.filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0];
 
-  // For dateTime comparisons, wrap the field in Date.parse too
-  const fieldExpr = valueType === 'dateTime' ? `Date.parse(${field})` : field;
-
-  // For string methods, use text emission for non-variable/field types
-  const stringMethodValue = (val: string) =>
-    (valueType === 'variable' || valueType === 'field') ? val : JSON.stringify(val);
-
-  switch (branch.operator) {
-    case '==':
-      return `${fieldExpr} == ${ev(branch.value)}`;
-    case '!=':
-      return `${fieldExpr} != ${ev(branch.value)}`;
-    case '<':
-      return `${fieldExpr} < ${ev(branch.value)}`;
-    case '<=':
-      return `${fieldExpr} <= ${ev(branch.value)}`;
-    case '>':
-      return `${fieldExpr} > ${ev(branch.value)}`;
-    case '>=':
-      return `${fieldExpr} >= ${ev(branch.value)}`;
-    case 'contains':
-      return `String(${field}).includes(${stringMethodValue(branch.value)})`;
-    case 'startsWith':
-      return `String(${field}).startsWith(${stringMethodValue(branch.value)})`;
-    case 'endsWith':
-      return `String(${field}).endsWith(${stringMethodValue(branch.value)})`;
-    case 'isEmpty':
-      return `!${field}`;
-    case 'isNotEmpty':
-      return `!!${field}`;
-    default:
-      return ''; // Should never happen
+  // Build expression respecting per-clause logic operators
+  let result = compiled[0];
+  for (let i = 1; i < clauses.length; i++) {
+    const clausePart = compiled[i];
+    if (!clausePart) continue;
+    const op = clauses[i].logic ?? branch.conditionLogic ?? 'AND';
+    result += op === 'OR' ? ' || ' : ' && ';
+    result += clausePart;
   }
+  return `(${result})`;
 }
 
 // ============================================================================
@@ -455,10 +512,32 @@ export function tryParseExpressionToVisualRule(expression: string): VisualRule |
     if (!consequentIsLiteral && !consequentIsIdent) return null;
     if (!alternateIsLiteral && !alternateIsIdent) return null;
 
-    // Try to parse the test condition into a simple comparison
-    const branch = parseSimpleCondition(testStr);
-    if (!branch) {
-      return null;
+    // Strip outer parens from the test expression (multi-clause conditions are wrapped)
+    let condStr = testStr;
+    if (condStr.startsWith('(') && condStr.endsWith(')')) {
+      condStr = condStr.slice(1, -1).trim();
+    }
+
+    // Try to split on && or || for multi-clause conditions (supports mixed AND/OR)
+    const split = splitOnMixedLogicOps(condStr);
+    let branch: VisualConditionBranch | null;
+
+    if (split && split.parts.length > 1) {
+      const clauses: ConditionClause[] = [];
+      for (let i = 0; i < split.parts.length; i++) {
+        const clause = parseConditionClause(split.parts[i]);
+        if (!clause) return null;
+        // Attach the connector logic to each clause (first clause has no connector)
+        if (i > 0) clause.logic = split.logics[i - 1];
+        clauses.push(clause);
+      }
+      branch = {
+        conditions: clauses,
+        result: '',
+      };
+    } else {
+      branch = parseSimpleCondition(condStr);
+      if (!branch) return null;
     }
 
     // Set the result from the consequent
@@ -503,10 +582,11 @@ function parseStringLiteral(str: string): string {
   }
 }
 
-/** Parse a simple condition like "amount > 1000" into a VisualConditionBranch */
-function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
-  // Handle simple operators: ==, !=, >=, <=, >, <
-  const patterns = [
+/** Parse a single condition string (e.g. "amount > 1000") into a ConditionClause */
+function parseConditionClause(testStr: string): ConditionClause | null {
+  testStr = testStr.trim();
+
+  const patterns: { op: ConditionOperator; regex: RegExp }[] = [
     { op: '==', regex: /^(.+?)\s*==\s*(.+)$/ },
     { op: '!=', regex: /^(.+?)\s*!=\s*(.+)$/ },
     { op: '>=', regex: /^(.+?)\s*>=\s*(.+)$/ },
@@ -521,47 +601,68 @@ function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
       const field = match[1].trim();
       let value = match[2].trim();
       let valueIsVariable: boolean | undefined;
-
-      // Parse the value: string literal → unquote, identifier → variable, number → as-is
       if (isStringLiteral(value)) {
         value = parseStringLiteral(value);
       } else if (isIdentifier(value)) {
         valueIsVariable = true;
       }
-      // else: numeric or expression — kept as-is
-
-      return {
-        field,
-        operator: op as ConditionOperator,
-        value,
-        valueIsVariable,
-        result: '', // Placeholder, will be set by caller
-      };
+      return { field, operator: op, value, valueIsVariable };
     }
   }
 
-  // Handle isEmpty / isNotEmpty
-  if (testStr === `!${testStr.substring(1)}` || testStr.match(/^![A-Za-z0-9_$\.]+$/)) {
-    const field = testStr.substring(1).trim();
-    return {
-      field,
-      operator: 'isEmpty',
-      value: '',
-      result: '',
-    };
-  }
-
   if (testStr.match(/^!![A-Za-z0-9_$\.]+$/)) {
-    const field = testStr.substring(2).trim();
-    return {
-      field,
-      operator: 'isNotEmpty',
-      value: '',
-      result: '',
-    };
+    return { field: testStr.substring(2).trim(), operator: 'isNotEmpty', value: '' };
+  }
+  if (testStr.match(/^![A-Za-z0-9_$\.]+$/)) {
+    return { field: testStr.substring(1).trim(), operator: 'isEmpty', value: '' };
   }
 
   return null;
+}
+
+/**
+ * Split an expression on top-level `&&` or `||` tokens.
+ * Returns the parts and per-connector logic operators (length = parts.length - 1).
+ * Supports mixed AND/OR (e.g. "A && B || C && D").
+ * Returns null if no logic operators were found.
+ */
+function splitOnMixedLogicOps(expr: string): { parts: string[]; logics: ('AND' | 'OR')[] } | null {
+  const parts: string[] = [];
+  const logics: ('AND' | 'OR')[] = [];
+  let depth = 0;
+  let start = 0;
+  let foundAny = false;
+
+  for (let i = 0; i < expr.length; i++) {
+    if (expr[i] === '(') { depth++; continue; }
+    if (expr[i] === ')') { depth--; continue; }
+    if (depth !== 0) continue;
+    if (expr[i] === '&' && expr[i + 1] === '&') {
+      foundAny = true;
+      parts.push(expr.slice(start, i).trim());
+      logics.push('AND');
+      i++; start = i + 1;
+    } else if (expr[i] === '|' && expr[i + 1] === '|') {
+      foundAny = true;
+      parts.push(expr.slice(start, i).trim());
+      logics.push('OR');
+      i++; start = i + 1;
+    }
+  }
+
+  if (!foundAny) return null;
+  parts.push(expr.slice(start).trim());
+  return { parts, logics };
+}
+
+/** Parse a simple condition like "amount > 1000" into a VisualConditionBranch */
+function parseSimpleCondition(testStr: string): VisualConditionBranch | null {
+  const clause = parseConditionClause(testStr);
+  if (!clause) return null;
+  return {
+    conditions: [clause],
+    result: '',
+  };
 }
 
 // ============================================================================
@@ -587,10 +688,14 @@ export function shiftRule(
     shifted.visualRule = {
       branches: rule.visualRule.branches.map((b) => ({
         ...b,
-        field: shiftCellRefsInExpression(b.field, rowDelta, colDelta),
-        value: b.valueIsVariable
-          ? shiftCellRefsInExpression(b.value, rowDelta, colDelta)
-          : b.value,
+        // Shift new-format conditions array
+        conditions: getBranchClauses(b).map((c) => ({
+          ...c,
+          field: shiftCellRefsInExpression(c.field, rowDelta, colDelta),
+          value: (c.valueIsVariable || c.valueType === 'variable' || c.valueType === 'field')
+            ? shiftCellRefsInExpression(c.value, rowDelta, colDelta)
+            : c.value,
+        })),
       })),
       defaultResult: rule.visualRule.defaultResult,
       defaultResultIsVariable: rule.visualRule.defaultResultIsVariable,
@@ -646,10 +751,7 @@ export function resolveRulesForCell(
   if (colRule) {
     const rowDelta = rowIndex - (colRule.sourceRow ?? 0);
     if (rowDelta === 0) return colRule;
-    return {
-      ...colRule,
-      compiledExpression: shiftCellRefsInExpression(colRule.compiledExpression, rowDelta, 0),
-    };
+    return shiftRule(colRule, rowDelta, 0);
   }
 
   // 3. Row-wide wildcard
@@ -658,10 +760,7 @@ export function resolveRulesForCell(
   if (rowRule) {
     const colDelta = colIndex - (rowRule.sourceCol ?? 0);
     if (colDelta === 0) return rowRule;
-    return {
-      ...rowRule,
-      compiledExpression: shiftCellRefsInExpression(rowRule.compiledExpression, 0, colDelta),
-    };
+    return shiftRule(rowRule, 0, colDelta);
   }
 
   return undefined;
