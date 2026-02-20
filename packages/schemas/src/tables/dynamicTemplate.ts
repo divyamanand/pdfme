@@ -3,6 +3,29 @@ import { createSingleTable } from './tableHelper.js';
 import { getBodyWithRange, getBody } from './helper.js';
 import { TableSchema } from './types.js';
 
+/**
+ * Pad table body with empty rows to match the template's designed row count.
+ * Ensures the table maintains its original height even when input has fewer rows.
+ */
+export const padTableBody = (value: string, schema: any): string => {
+  try {
+    const templateContent = JSON.parse(schema.content || '[]') as string[][];
+    const templateRows = templateContent.length;
+    const currentRows = JSON.parse(value || '[]') as string[][];
+
+    if (currentRows.length >= templateRows) {
+      return value; // Already has enough rows
+    }
+
+    const numCols = schema.head?.length ?? (currentRows[0]?.length ?? 0);
+    const emptyRow = Array(numCols).fill('');
+    const padded = [...currentRows, ...Array(templateRows - currentRows.length).fill(emptyRow)];
+    return JSON.stringify(padded);
+  } catch {
+    return value; // If parsing fails, return unchanged
+  }
+};
+
 export const getDynamicHeightsForTable = async (
   value: string,
   args: {
@@ -14,10 +37,12 @@ export const getDynamicHeightsForTable = async (
 ): Promise<number[]> => {
   if (args.schema.type !== 'table') return Promise.resolve([args.schema.height]);
   const schema = args.schema as TableSchema;
+  // Pad value with empty rows to match template's designed row count
+  const paddedValue = padTableBody(value, schema);
   const body =
     schema.__bodyRange?.start === 0
-      ? getBody(value, schema.head)
-      : getBodyWithRange(value, schema.__bodyRange, schema.head);
+      ? getBody(paddedValue, schema.head)
+      : getBodyWithRange(paddedValue, schema.__bodyRange, schema.head);
   const table = await createSingleTable(body, args);
 
   const baseHeights = schema.showHead

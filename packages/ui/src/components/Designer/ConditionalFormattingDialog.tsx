@@ -408,18 +408,23 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
     [isTable, saveTableRule, saveNonTableRule],
   );
 
-  // Clear handler
+  // Clear handler — delete the correct key based on current scope
   const clearRule = useCallback(() => {
     if (!schemaId) return;
     if (isTable) {
       const updated = { ...cf };
-      const key = `${selectedRow}:${selectedCol}`;
-      delete updated[key];
+      if (scope === 'cell') {
+        delete updated[`${selectedRow}:${selectedCol}`];
+      } else if (scope === 'column') {
+        delete updated[`*:${selectedCol}`];
+      } else if (scope === 'row') {
+        delete updated[`${selectedRow}:*`];
+      }
       changeSchemas([{ key: 'conditionalFormatting', value: updated, schemaId }]);
     } else {
       changeSchemas([{ key: 'conditionalFormatting', value: undefined, schemaId }]);
     }
-  }, [cf, isTable, selectedRow, selectedCol, schemaId, changeSchemas]);
+  }, [cf, isTable, scope, selectedRow, selectedCol, schemaId, changeSchemas]);
 
   if (!selectedSchema) {
     return (

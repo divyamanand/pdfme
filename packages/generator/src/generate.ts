@@ -13,7 +13,7 @@ import {
   pt2mm,
   cloneDeep,
 } from '@pdfme/common';
-import { getDynamicHeightsForTable, getDynamicHeightsForNestedTable } from '@pdfme/schemas';
+import { getDynamicHeightsForTable, getDynamicHeightsForNestedTable, padTableBody } from '@pdfme/schemas';
 import {
   insertPage,
   preprocessing,
@@ -169,6 +169,8 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           if (!staticSchema.readOnly && value) {
             if (staticSchema.type === 'table' || staticSchema.type === 'nestedTable') {
               const tableSchema = staticSchema as any;
+              // Pad table with empty rows to maintain designed height
+              value = padTableBody(value, tableSchema);
               const tableCFResult = evaluateTableCellExpressions({
                 value,
                 variables: varsContext,
@@ -266,6 +268,8 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
         if (!schema.readOnly && value) {
           if (schema.type === 'table' || schema.type === 'nestedTable') {
             const tableSchema = schema as any;
+            // Pad table with empty rows to maintain designed height
+            value = padTableBody(value, tableSchema);
             const tableCFResult = evaluateTableCellExpressions({
               value,
               variables: varsContext,

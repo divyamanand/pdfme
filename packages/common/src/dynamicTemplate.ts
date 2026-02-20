@@ -198,6 +198,9 @@ function removeTrailingEmptyPages(pages: Schema[][]): void {
  * Process a single template page that has dynamic content.
  * Uses the same layout algorithm as the original implementation,
  * but scoped to a single page's schemas.
+ *
+ * Smart spacing: elements only shift forward if the previous element overflows into their space.
+ * This allows tables to consume gap space without pushing subsequent elements unnecessarily.
  */
 function processDynamicPage(
   items: LayoutItem[],
@@ -206,10 +209,11 @@ function processDynamicPage(
   paddingTop: number,
 ): Schema[][] {
   const pages: Schema[][] = [];
-  let totalYOffset = 0;
+  let previousActualEndY = 0;
 
   for (const item of items) {
-    const currentGlobalStartY = item.baseY + totalYOffset;
+    // Only push forward if the previous item overflows into this item's space
+    const currentGlobalStartY = Math.max(item.baseY, previousActualEndY);
 
     const actualGlobalEndY = placeRowsOnPages(
       item.schema,
@@ -220,9 +224,7 @@ function processDynamicPage(
       pages,
     );
 
-    // Update offset: difference between actual and original end position
-    const originalGlobalEndY = item.baseY + item.height;
-    totalYOffset = actualGlobalEndY - originalGlobalEndY;
+    previousActualEndY = actualGlobalEndY;
   }
 
   sortPagesByOrder(pages, orderMap);

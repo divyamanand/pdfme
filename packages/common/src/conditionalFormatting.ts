@@ -822,12 +822,14 @@ export function shiftCFRows(
     const rowIndex = parseInt(rowStr, 10);
 
     if (colStr === '*') {
-      // Row-wide wildcard — shift the row part
+      // Row-wide wildcard — shift the row part and update cell refs + sourceRow
       if (delta === -1 && rowIndex === afterRow) continue;
       if (delta === -1 && rowIndex > afterRow) {
-        updated[`${rowIndex - 1}:*`] = rules;
+        const shifted = shiftRule(rules, -1, 0);
+        updated[`${rowIndex - 1}:*`] = { ...shifted, sourceRow: rowIndex - 1 };
       } else if (delta === 1 && rowIndex >= afterRow) {
-        updated[`${rowIndex + 1}:*`] = rules;
+        const shifted = shiftRule(rules, 1, 0);
+        updated[`${rowIndex + 1}:*`] = { ...shifted, sourceRow: rowIndex + 1 };
       } else {
         updated[key] = rules;
       }
@@ -841,9 +843,9 @@ export function shiftCFRows(
     }
 
     if (delta === -1 && rowIndex > afterRow) {
-      updated[`${rowIndex - 1}:${colIndex}`] = rules;
+      updated[`${rowIndex - 1}:${colIndex}`] = shiftRule(rules, -1, 0);
     } else if (delta === 1 && rowIndex >= afterRow) {
-      updated[`${rowIndex + 1}:${colIndex}`] = rules;
+      updated[`${rowIndex + 1}:${colIndex}`] = shiftRule(rules, 1, 0);
     } else {
       updated[key] = rules;
     }
@@ -878,12 +880,14 @@ export function shiftCFCols(
     const colIndex = parseInt(colStr, 10);
 
     if (rowStr === '*') {
-      // Column-wide wildcard — shift the col part
+      // Column-wide wildcard — shift the col part and update cell refs + sourceCol
       if (delta === -1 && colIndex === afterCol) continue;
       if (delta === -1 && colIndex > afterCol) {
-        updated[`*:${colIndex - 1}`] = rules;
+        const shifted = shiftRule(rules, 0, -1);
+        updated[`*:${colIndex - 1}`] = { ...shifted, sourceCol: colIndex - 1 };
       } else if (delta === 1 && colIndex >= afterCol) {
-        updated[`*:${colIndex + 1}`] = rules;
+        const shifted = shiftRule(rules, 0, 1);
+        updated[`*:${colIndex + 1}`] = { ...shifted, sourceCol: colIndex + 1 };
       } else {
         updated[key] = rules;
       }
@@ -897,9 +901,9 @@ export function shiftCFCols(
     }
 
     if (delta === -1 && colIndex > afterCol) {
-      updated[`${rowIndex}:${colIndex - 1}`] = rules;
+      updated[`${rowIndex}:${colIndex - 1}`] = shiftRule(rules, 0, -1);
     } else if (delta === 1 && colIndex >= afterCol) {
-      updated[`${rowIndex}:${colIndex + 1}`] = rules;
+      updated[`${rowIndex}:${colIndex + 1}`] = shiftRule(rules, 0, 1);
     } else {
       updated[key] = rules;
     }

@@ -42,5 +42,5 @@ export {
 };
 
 // Export utility functions
-export { getDynamicHeightsForTable } from './tables/dynamicTemplate.js';
+export { getDynamicHeightsForTable, padTableBody } from './tables/dynamicTemplate.js';
 export { getDynamicHeightsForNestedTable } from './nestedTable/dynamicTemplate.js';
