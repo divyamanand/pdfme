@@ -152,13 +152,15 @@ export const isBlankPdf = (basePdf: BasePdf): basePdf is BlankPdf =>
   BlankPdfSchema.safeParse(basePdf).success;
 
 /**
- * Get the padding for a specific page, falling back to the global BlankPdf padding.
+ * Get the padding for a specific page. Each page has its own per-page padding setting.
+ * Returns the page-specific padding, or the default [10, 10, 10, 10] if not set.
+ * Note: Global basePdf.padding is deprecated and no longer used.
  */
 export const getPagePadding = (
   basePdf: BlankPdf,
   pageIndex: number,
 ): [number, number, number, number] =>
-  basePdf.pageSettings?.[pageIndex]?.padding ?? basePdf.padding;
+  basePdf.pageSettings?.[pageIndex]?.padding ?? [10, 10, 10, 10];
 
 /**
  * Get the background color for a specific page, or undefined if not set.

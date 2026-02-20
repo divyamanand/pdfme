@@ -524,8 +524,14 @@ const handlePositionSizeChange = (
   value: unknown,
   basePdf: BasePdf,
   pageSize: Size,
+  pageIndex: number = 0,
 ) => {
-  const padding = isBlankPdf(basePdf) ? basePdf.padding : [0, 0, 0, 0];
+  let padding: [number, number, number, number] = [10, 10, 10, 10];
+  if (isBlankPdf(basePdf)) {
+    // Import getPagePadding at top if not already imported
+    const pageSettings = basePdf.pageSettings?.[pageIndex];
+    padding = pageSettings?.padding ?? [10, 10, 10, 10];
+  }
   const [pt, pr, pb, pl] = padding;
   const { width: pw, height: ph } = pageSize;
   const calcBounds = (v: unknown, min: number, max: number) =>

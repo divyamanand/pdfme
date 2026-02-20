@@ -126,14 +126,14 @@ const Uint8ArraySchema: z.ZodSchema<Uint8Array<ArrayBuffer>> = z
   .refine((v) => v instanceof Uint8Array && v.buffer instanceof ArrayBuffer);
 
 export const PageSettings = z.object({
-  padding: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+  padding: z.tuple([z.number(), z.number(), z.number(), z.number()]).default([10, 10, 10, 10]),
   backgroundColor: z.string().optional(),
 });
 
 export const BlankPdf = z.object({
   width: z.number(),
   height: z.number(),
-  padding: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  padding: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional().describe('Deprecated: Use pageSettings[].padding instead'),
   staticSchema: z.array(Schema).optional(),
   pageSettings: z.array(PageSettings).optional(),
 });

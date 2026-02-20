@@ -1,4 +1,4 @@
-import { Schema, BasePdf, BlankPdf, CommonOptions, isBlankPdf } from '@pdfme/common';
+import { Schema, BasePdf, BlankPdf, CommonOptions, isBlankPdf, getPagePadding } from '@pdfme/common';
 import { createSingleTable } from '../tables/tableHelper.js';
 import { getBodyWithRange, getBody } from '../tables/helper.js';
 import type { NestedTableSchema } from './types.js';
@@ -80,10 +80,13 @@ export const getDynamicHeightsForNestedTable = async (
 
   // Apply header repetition logic
   const basePdf = args.basePdf as BlankPdf;
-  const [paddingTop, , paddingBottom] = basePdf.padding;
+  // First, estimate initial page with default padding to get the right page index
+  const roughPageIndex = Math.max(0, Math.floor((schema.position.y - 10) / (basePdf.height - 20)));
+  const [paddingTop, , paddingBottom] = getPagePadding(basePdf, roughPageIndex);
   const pageContentHeight = basePdf.height - paddingTop - paddingBottom;
   const getPageStartY = (pageIndex: number) => pageIndex * pageContentHeight + paddingTop;
 
+  // Now calculate the accurate initial page index using the actual padding
   const initialPageIndex = Math.max(
     0,
     Math.floor((schema.position.y - paddingTop) / pageContentHeight)

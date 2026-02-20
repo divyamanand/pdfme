@@ -1,5 +1,5 @@
 import { Schema, Template, BasePdf, BlankPdf, CommonOptions } from './types.js';
-import { cloneDeep, isBlankPdf } from './helper.js';
+import { cloneDeep, isBlankPdf, getPagePadding } from './helper.js';
 
 /** Floating point tolerance for comparisons */
 const EPSILON = 0.01;
@@ -28,8 +28,10 @@ interface LayoutItem {
 }
 
 /** Calculate the content height of a page (drawable area excluding padding) */
-const getContentHeight = (basePdf: BlankPdf): number =>
-  basePdf.height - basePdf.padding[0] - basePdf.padding[2];
+const getContentHeight = (basePdf: BlankPdf, pageIndex: number): number => {
+  const [paddingTop, , paddingBottom] = getPagePadding(basePdf, pageIndex);
+  return basePdf.height - paddingTop - paddingBottom;
+};
 
 /** Get the input value for a schema */
 const getSchemaValue = (schema: Schema, input: Record<string, string>): string =>
@@ -251,14 +253,16 @@ export const getDynamicTemplate = async (
     return template;
   }
 
-  const contentHeight = getContentHeight(basePdf);
-  const paddingTop = basePdf.padding[0];
   const resultPages: Schema[][] = [];
   const PARALLEL_LIMIT = 10;
 
   // Process each template page independently
   for (let pageIndex = 0; pageIndex < template.schemas.length; pageIndex++) {
     const pageSchemas = template.schemas[pageIndex];
+
+    // Get per-page padding and content height
+    const [paddingTop] = getPagePadding(basePdf, pageIndex);
+    const contentHeight = getContentHeight(basePdf, pageIndex);
 
     // Normalize this page's schemas
     const { items, orderMap } = normalizePageSchemas(pageSchemas, paddingTop);

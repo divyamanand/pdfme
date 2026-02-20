@@ -117,9 +117,17 @@ const DetailView = (props: DetailViewProps) => {
   const validateUniqueSchemaName = (_: unknown, value: string): boolean =>
     uniqueSchemaName.current(value);
 
-  // Calculate padding values once
+  // Calculate padding values once - find which page the activeSchema is on
+  let pageIndex = 0;
+  for (let i = 0; i < schemasList.length; i++) {
+    if (schemasList[i].some(s => s.id === activeSchema.id)) {
+      pageIndex = i;
+      break;
+    }
+  }
+
   const [paddingTop, paddingRight, paddingBottom, paddingLeft] = isBlankPdf(basePdf)
-    ? basePdf.padding
+    ? getPagePadding(basePdf, pageIndex)
     : [0, 0, 0, 0];
 
   // Cross-field validation: only checks when both fields are individually valid

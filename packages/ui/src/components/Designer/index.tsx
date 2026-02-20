@@ -329,10 +329,10 @@ const TemplateEditor = ({
   const handleAddPageAfter = () => {
     const _schemasList = cloneDeep(schemasList);
     _schemasList.splice(pageCursor + 1, 0, []);
-    // Insert empty per-page settings entry (inherits global defaults)
-    if (isBlankPdf(template.basePdf) && template.basePdf.pageSettings) {
-      const settings = [...template.basePdf.pageSettings];
-      settings.splice(pageCursor + 1, 0, {});
+    // Insert per-page settings with default padding for new page
+    if (isBlankPdf(template.basePdf)) {
+      const settings = template.basePdf.pageSettings ? [...template.basePdf.pageSettings] : [];
+      settings.splice(pageCursor + 1, 0, { padding: [10, 10, 10, 10] });
       template.basePdf.pageSettings = settings;
     }
     void updatePage(_schemasList, pageCursor + 1);
@@ -377,11 +377,11 @@ const TemplateEditor = ({
 
         _schemasList.splice(pageCursor + 1, 0, ...clones);
         // Clone per-page settings for each cloned page
-        if (isBlankPdf(template.basePdf) && template.basePdf.pageSettings) {
-          const settings = [...template.basePdf.pageSettings];
-          const sourceSettings = settings[pageCursor];
+        if (isBlankPdf(template.basePdf)) {
+          const settings = template.basePdf.pageSettings ? [...template.basePdf.pageSettings] : [];
+          const sourceSettings = settings[pageCursor] || { padding: [10, 10, 10, 10] };
           for (let ci = 0; ci < cloneCount; ci++) {
-            settings.splice(pageCursor + 1 + ci, 0, sourceSettings ? cloneDeep(sourceSettings) : {});
+            settings.splice(pageCursor + 1 + ci, 0, cloneDeep(sourceSettings));
           }
           template.basePdf.pageSettings = settings;
         }
@@ -395,11 +395,11 @@ const TemplateEditor = ({
     const basePdf = template.basePdf;
     // Initialize pageSettings array if it doesn't exist
     if (!basePdf.pageSettings) {
-      basePdf.pageSettings = Array.from({ length: schemasList.length }, () => ({}));
+      basePdf.pageSettings = Array.from({ length: schemasList.length }, () => ({ padding: [10, 10, 10, 10] }));
     }
     // Ensure array is large enough
     while (basePdf.pageSettings.length < schemasList.length) {
-      basePdf.pageSettings.push({});
+      basePdf.pageSettings.push({ padding: [10, 10, 10, 10] });
     }
     const currentSettings = basePdf.pageSettings[pageCursor] || {};
     const currentPadding = getPagePadding(basePdf, pageCursor);
