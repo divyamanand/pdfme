@@ -8,6 +8,7 @@ import {
   getDefaultFont,
   getFallbackFontName,
   mm2pt,
+  resolveFontVariant,
 } from '@pdfme/common';
 import {
   VERTICAL_ALIGN_TOP,
@@ -106,6 +107,8 @@ export const pdfRender = async (arg: PDFRenderProps<TextSchema>) => {
     if (cfStyles.fontName !== undefined) schema.fontName = cfStyles.fontName;
     if (cfStyles.strikethrough !== undefined) schema.strikethrough = cfStyles.strikethrough;
     if (cfStyles.underline !== undefined) schema.underline = cfStyles.underline;
+    if (cfStyles.bold !== undefined) schema.bold = cfStyles.bold;
+    if (cfStyles.italic !== undefined) schema.italic = cfStyles.italic;
   }
 
   const { font = getDefaultFont(), colorType } = options;
@@ -116,15 +119,15 @@ export const pdfRender = async (arg: PDFRenderProps<TextSchema>) => {
       font,
       _cache: _cache as unknown as Map<PDFDocument, { [key: string]: PDFFont }>,
     }),
-    getFontKitFont(schema.fontName, font, _cache as Map<string, FontKitFont>),
+    getFontKitFont(schema.fontName, font, _cache as Map<string, FontKitFont>, schema.bold, schema.italic),
   ]);
   const fontProp = getFontProp({ value, fontKitFont, schema, colorType });
 
   const { fontSize, color, alignment, verticalAlignment, lineHeight, characterSpacing } = fontProp;
 
-  const fontName = (
-    schema.fontName ? schema.fontName : getFallbackFontName(font)
-  ) as keyof typeof pdfFontObj;
+  const baseFontName = schema.fontName ? schema.fontName : getFallbackFontName(font);
+  const effectiveFontName = resolveFontVariant(baseFontName, schema.bold ?? false, schema.italic ?? false, font);
+  const fontName = effectiveFontName as keyof typeof pdfFontObj;
   const pdfFontValue = pdfFontObj && pdfFontObj[fontName];
 
   const pageHeight = page.getHeight();

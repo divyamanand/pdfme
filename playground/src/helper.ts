@@ -1,8 +1,30 @@
-import { Template, Font, checkTemplate, getInputFromTemplate, getDefaultFont } from '@pdfme/common';
+import {
+  Template,
+  Font,
+  checkTemplate,
+  getInputFromTemplate,
+  getDefaultFont,
+  buildBrowserFontConfig,
+  buildGoogleFontConfig,
+  buildHybridFontConfig,
+} from '@pdfme/common';
 import { Form, Viewer, Designer } from '@pdfme/ui';
 import { generate } from '@pdfme/generator';
 import { toast } from 'react-toastify';
 import { getPlugins } from './plugins';
+
+/**
+ * Font loading mode configuration:
+ * - 'offline': Load fonts from local static files (/fonts/*.ttf)
+ * - 'online': Load fonts from Google Fonts CDN (requires internet)
+ * - 'hybrid': Try local first, fallback to Google Fonts
+ * - 'hybrid-online': Prefer Google Fonts, fallback to local
+ */
+type FontLoadMode = 'offline' | 'online' | 'hybrid' | 'hybrid-online';
+
+const FONT_LOAD_MODE: FontLoadMode = (
+  import.meta.env.VITE_FONT_MODE || 'offline'
+) as FontLoadMode;
 
 export function fromKebabCase(str: string): string {
   return str
@@ -11,21 +33,40 @@ export function fromKebabCase(str: string): string {
     .join(' ');
 }
 
-export const getFontsData = (): Font => ({
-  ...getDefaultFont(),
-  'PinyonScript-Regular': {
-    fallback: false,
-    data: 'https://fonts.gstatic.com/s/pinyonscript/v22/6xKpdSJbL9-e9LuoeQiDRQR8aOLQO4bhiDY.ttf',
-  },
-  NotoSerifJP: {
-    fallback: false,
-    data: 'https://fonts.gstatic.com/s/notoserifjp/v30/xn71YHs72GKoTvER4Gn3b5eMRtWGkp6o7MjQ2bwxOubAILO5wBCU.ttf',
-  },
-  NotoSansJP: {
-    fallback: false,
-    data: 'https://fonts.gstatic.com/s/notosansjp/v53/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75vY0rw-oME.ttf',
+/**
+ * Get fonts configuration based on the selected mode.
+ * Supports both online (Google Fonts) and offline (local files) loading.
+ *
+ * @param mode - Font loading mode ('offline', 'online', 'hybrid', 'hybrid-online')
+ * @returns Font configuration object
+ */
+export const getFontsData = (mode: FontLoadMode = FONT_LOAD_MODE): Font => {
+  const defaultFont = getDefaultFont();
+  const robotoData = defaultFont['Roboto'].data as Uint8Array;
+
+  switch (mode) {
+    case 'online':
+      // Load all fonts from Google Fonts CDN
+      console.log('📡 Loading fonts from Google Fonts CDN (online mode)');
+      return buildGoogleFontConfig(robotoData);
+
+    case 'hybrid':
+      // Prefer local files, fallback to Google Fonts
+      console.log('🔄 Loading fonts in hybrid mode (local-first)');
+      return buildHybridFontConfig('/fonts', robotoData, false);
+
+    case 'hybrid-online':
+      // Prefer Google Fonts, fallback to local files
+      console.log('🔄 Loading fonts in hybrid mode (online-first)');
+      return buildHybridFontConfig('/fonts', robotoData, true);
+
+    case 'offline':
+    default:
+      // Load fonts from local static files only
+      console.log('💾 Loading fonts from local files (offline mode)');
+      return buildBrowserFontConfig('/fonts', robotoData);
   }
-});
+};
 
 export const readFile = (file: File | null, type: 'text' | 'dataURL' | 'arrayBuffer') => {
   return new Promise<string | ArrayBuffer>((r) => {

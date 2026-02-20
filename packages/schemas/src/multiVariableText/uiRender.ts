@@ -78,6 +78,8 @@ const formUiRender = async (arg: UIRenderProps<MultiVariableTextSchema>) => {
     schema.fontName,
     font,
     _cache as Map<string, import('fontkit').Font>,
+    schema.bold,
+    schema.italic,
   );
 
   const textBlock = buildStyledTextContainer(arg, fontKitFont, substitutedText);

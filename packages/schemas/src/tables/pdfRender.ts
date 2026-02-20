@@ -27,6 +27,8 @@ async function drawCell(arg: PDFRenderProps<TableSchema>, cell: Cell, cfOverride
     width: cell.width,
     height: cell.height,
     fontName: cell.styles.fontName,
+    bold: cell.styles.bold,
+    italic: cell.styles.italic,
     alignment: cell.styles.alignment,
     verticalAlignment: cell.styles.verticalAlignment,
     fontSize: cell.styles.fontSize,
@@ -52,6 +54,8 @@ async function drawCell(arg: PDFRenderProps<TableSchema>, cell: Cell, cfOverride
     if (cfOverrides.borderColor !== undefined) cellSchema.borderColor = cfOverrides.borderColor;
     if (cfOverrides.strikethrough !== undefined) cellSchema.strikethrough = cfOverrides.strikethrough;
     if (cfOverrides.underline !== undefined) cellSchema.underline = cfOverrides.underline;
+    if (cfOverrides.bold !== undefined) cellSchema.bold = cfOverrides.bold;
+    if (cfOverrides.italic !== undefined) cellSchema.italic = cfOverrides.italic;
   }
 
   await cellPdfRender({

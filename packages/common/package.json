@@ -34,6 +34,11 @@
       "types": "./dist/types/src/index.d.ts"
     }
   },
+  "files": [
+    "dist",
+    "src",
+    "assets"
+  ],
   "scripts": {
     "dev": "node set-version.js && tsc -p tsconfig.esm.json -w",
     "prebuild": "node set-version.js",

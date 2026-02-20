@@ -39,6 +39,8 @@ const cellUiRender = cell.ui;
 
 const convertToCellStyle = (styles: Styles): CellStyle => ({
   fontName: styles.fontName,
+  bold: styles.bold,
+  italic: styles.italic,
   alignment: styles.alignment,
   verticalAlignment: styles.verticalAlignment,
   fontSize: styles.fontSize,
@@ -212,6 +214,8 @@ const renderRowUi = (args: {
               if (cfOverrides.borderColor !== undefined) baseSchema.borderColor = cfOverrides.borderColor;
               if (cfOverrides.strikethrough !== undefined) baseSchema.strikethrough = cfOverrides.strikethrough;
               if (cfOverrides.underline !== undefined) baseSchema.underline = cfOverrides.underline;
+              if (cfOverrides.bold !== undefined) baseSchema.bold = cfOverrides.bold;
+              if (cfOverrides.italic !== undefined) baseSchema.italic = cfOverrides.italic;
             }
           }
           return baseSchema;

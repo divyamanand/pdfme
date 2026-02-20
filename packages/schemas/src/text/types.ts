@@ -13,6 +13,8 @@ export type FontWidthCalcValues = {
 };
 export interface TextSchema extends Schema {
   fontName?: string;
+  bold?: boolean;
+  italic?: boolean;
   alignment: ALIGNMENT;
   verticalAlignment: VERTICAL_ALIGNMENT;
   fontSize: number;

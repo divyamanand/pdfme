@@ -15,6 +15,8 @@ import { HEX_COLOR_PATTERN } from '../constants.js';
 
 export const getDefaultCellStyles = () => ({
   fontName: undefined,
+  bold: false,
+  italic: false,
   alignment: DEFAULT_ALIGNMENT,
   verticalAlignment: VERTICAL_ALIGN_MIDDLE,
   fontSize: DEFAULT_FONT_SIZE,
@@ -59,6 +61,20 @@ export const getCellPropPanelSchema = (arg: {
       placeholder: fallbackFontName,
       props: { options: fontNames.map((name) => ({ label: name, value: name })) },
       span: 12,
+    },
+    bold: {
+      title: i18n('schemas.text.bold'),
+      type: 'boolean',
+      widget: 'switch',
+      default: false,
+      span: 6,
+    },
+    italic: {
+      title: i18n('schemas.text.italic'),
+      type: 'boolean',
+      widget: 'switch',
+      default: false,
+      span: 6,
     },
     fontSize: {
       title: i18n('schemas.text.size'),

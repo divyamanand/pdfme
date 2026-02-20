@@ -231,6 +231,8 @@ export const buildStyledTextContainer = (
   const textBlockStyle: CSS.Properties = {
     // Font formatting styles
     fontFamily: schema.fontName ? `'${schema.fontName}'` : 'inherit',
+    fontWeight: schema.bold ? 'bold' : 'normal',
+    fontStyle: schema.italic ? 'italic' : 'normal',
     color: schema.fontColor ? schema.fontColor : DEFAULT_FONT_COLOR,
     fontSize: `${dynamicFontSize ?? schema.fontSize ?? DEFAULT_FONT_SIZE}pt`,
     letterSpacing: `${schema.characterSpacing ?? DEFAULT_CHARACTER_SPACING}pt`,

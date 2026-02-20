@@ -9,6 +9,7 @@ import {
   getFallbackFontName,
   getDefaultFont,
   DEFAULT_FONT_NAME,
+  resolveFontVariant,
 } from '@pdfme/common';
 import { Buffer } from 'buffer';
 import type { TextSchema, FontWidthCalcValues } from './types.js';
@@ -107,20 +108,23 @@ const getFallbackFont = (font: Font) => {
   return font[fallbackFontName];
 };
 
-const getCacheKey = (fontName: string) => `getFontKitFont-${fontName}`;
+const getCacheKey = (fontName: string, bold = false, italic = false) => `getFontKitFont-${fontName}-${bold}-${italic}`;
 
 export const getFontKitFont = async (
   fontName: string | undefined,
   font: Font,
   _cache: Map<string | number, fontkit.Font>,
+  bold = false,
+  italic = false,
 ) => {
-  const fntNm = fontName || getFallbackFontName(font);
-  const cacheKey = getCacheKey(fntNm);
+  const baseFontName = fontName || getFallbackFontName(font);
+  const resolvedFontName = resolveFontVariant(baseFontName, bold, italic, font);
+  const cacheKey = getCacheKey(resolvedFontName, bold, italic);
   if (_cache.has(cacheKey)) {
     return _cache.get(cacheKey) as fontkit.Font;
   }
 
-  const currentFont = font[fntNm] || getFallbackFont(font) || getDefaultFont()[DEFAULT_FONT_NAME];
+  const currentFont = font[resolvedFontName] || getFallbackFont(font) || getDefaultFont()[DEFAULT_FONT_NAME];
   let fontData = currentFont.data;
   if (typeof fontData === 'string') {
     fontData = fontData.startsWith('http')

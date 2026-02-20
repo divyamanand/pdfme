@@ -67,6 +67,8 @@ import {
 } from './helper.js';
 import { getDynamicTemplate } from './dynamicTemplate.js';
 import { replacePlaceholders, evaluateExpressions, evaluateTableCellExpressions, evaluateSchemaConditionalFormatting, buildTableCellContext, buildCFAwareCellContext, aggFunctions } from './expression.js';
+import { FONT_REGISTRY, GOOGLE_FONTS_URLS, getAvailableFontNames, buildBrowserFontConfig, buildGoogleFontConfig, buildHybridFontConfig, resolveFontVariant } from './fonts.js';
+import type { FontRegistryEntry } from './fonts.js';
 import { pluginRegistry } from './pluginRegistry.js';
 import {
   colIndexToLetter,
@@ -164,6 +166,13 @@ export {
   checkDesignerProps,
   checkGenerateProps,
   pluginRegistry,
+  FONT_REGISTRY,
+  GOOGLE_FONTS_URLS,
+  getAvailableFontNames,
+  buildBrowserFontConfig,
+  buildGoogleFontConfig,
+  buildHybridFontConfig,
+  resolveFontVariant,
 };
 
 export type {
@@ -209,4 +218,5 @@ export type {
   CFEvaluationResult,
   TableCFEvaluationResult,
   CFValueType,
+  FontRegistryEntry,
 };

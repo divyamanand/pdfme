@@ -53,6 +53,8 @@ function pt2mm(pt: number): number {
 // Convert Styles (from table engine) to CellStyle properties (for cellUiRender schema)
 const convertToCellStyle = (styles: Styles) => ({
   fontName: styles.fontName,
+  bold: styles.bold,
+  italic: styles.italic,
   alignment: styles.alignment,
   verticalAlignment: styles.verticalAlignment,
   fontSize: styles.fontSize,
@@ -369,6 +371,8 @@ export const uiRender = async (arg: UIRenderProps<NestedTableSchema>) => {
             if (cfOverrides.borderColor !== undefined) baseSchema.borderColor = cfOverrides.borderColor;
             if (cfOverrides.strikethrough !== undefined) baseSchema.strikethrough = cfOverrides.strikethrough;
             if (cfOverrides.underline !== undefined) baseSchema.underline = cfOverrides.underline;
+            if (cfOverrides.bold !== undefined) baseSchema.bold = cfOverrides.bold;
+            if (cfOverrides.italic !== undefined) baseSchema.italic = cfOverrides.italic;
           }
           return baseSchema;
         })(),

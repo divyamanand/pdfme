@@ -46,6 +46,8 @@ async function drawCell(
       width,
       height,
       fontName: arg.schema.headStyles.fontName,
+      bold: arg.schema.headStyles.bold,
+      italic: arg.schema.headStyles.italic,
       alignment: arg.schema.headStyles.alignment,
       verticalAlignment: arg.schema.headStyles.verticalAlignment,
       fontSize: arg.schema.headStyles.fontSize,
@@ -173,6 +175,8 @@ export const pdfRender = async (arg: PDFRenderProps<NestedTableSchema>) => {
           width: column.width,
           height: row.height,
           fontName: bodyCell.styles.fontName,
+          bold: bodyCell.styles.bold,
+          italic: bodyCell.styles.italic,
           alignment: bodyCell.styles.alignment,
           verticalAlignment: bodyCell.styles.verticalAlignment,
           fontSize: bodyCell.styles.fontSize,
@@ -199,6 +203,8 @@ export const pdfRender = async (arg: PDFRenderProps<NestedTableSchema>) => {
           if (cfOverrides.borderColor !== undefined) cellSchema.borderColor = cfOverrides.borderColor;
           if (cfOverrides.strikethrough !== undefined) cellSchema.strikethrough = cfOverrides.strikethrough;
           if (cfOverrides.underline !== undefined) cellSchema.underline = cfOverrides.underline;
+          if (cfOverrides.bold !== undefined) cellSchema.bold = cfOverrides.bold;
+          if (cfOverrides.italic !== undefined) cellSchema.italic = cfOverrides.italic;
         }
 
         await cellPdfRender({

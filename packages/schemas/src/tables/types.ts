@@ -7,6 +7,8 @@ type BoxDimensions = Spacing;
 
 export interface CellStyle {
   fontName?: string;
+  bold?: boolean;
+  italic?: boolean;
   alignment: ALIGNMENT;
   verticalAlignment: VERTICAL_ALIGNMENT;
   fontSize: number;
@@ -41,6 +43,8 @@ export interface TableSchema extends Schema {
 
 export interface Styles {
   fontName: string | undefined;
+  bold?: boolean;
+  italic?: boolean;
   backgroundColor: string;
   textColor: string;
   lineHeight: number;
