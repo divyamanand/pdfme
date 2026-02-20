@@ -241,7 +241,12 @@ const ConditionalFormattingDialog: React.FC<ConditionalFormattingDialogProps> = 
 
     const handleCellSelect = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.schemaId === effectiveSchemaId && detail.row !== undefined && detail.col !== undefined) {
+      if (detail?.schemaId && detail.row !== undefined && detail.col !== undefined) {
+        // Update selected schema if it changed
+        if (detail.schemaId !== effectiveSchemaId) {
+          setSelectedSchemaId(detail.schemaId);
+        }
+        // Update selected cell
         setSelectedRow(detail.row);
         setSelectedCol(detail.col);
       }
@@ -620,6 +625,15 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ mode, existingRule, onSave, onC
   );
   const [codeValue, setCodeValue] = useState(existingRule?.compiledExpression || '');
   const [codeStyles, setCodeStyles] = useState<CFStyleOverrides | undefined>(existingRule?.codeStyles);
+
+  // Sync state when existingRule changes (e.g., when user selects different cell)
+  useEffect(() => {
+    setVisualRule(
+      existingRule?.visualRule ? JSON.parse(JSON.stringify(existingRule.visualRule)) : { branches: [], defaultResult: '' },
+    );
+    setCodeValue(existingRule?.compiledExpression || '');
+    setCodeStyles(existingRule?.codeStyles);
+  }, [existingRule]);
 
   if (mode === 'visual') {
     return (
