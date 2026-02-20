@@ -710,20 +710,14 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
     onRuleChange({ ...rule, branches: newBranches });
   };
 
-  // Update a specific condition clause within a branch
-  const updateClause = (branchIdx: number, clauseIdx: number, field: keyof ConditionClause, value: any) => {
+  // Update a specific condition clause within a branch (atomic — pass all fields at once)
+  const updateClause = (branchIdx: number, clauseIdx: number, updates: Partial<ConditionClause>) => {
     const newBranches = [...rule.branches];
     const branch = { ...newBranches[branchIdx] };
     const clauses = getBranchClauses(branch).map((c, i) =>
-      i === clauseIdx ? { ...c, [field]: value } : c
+      i === clauseIdx ? { ...c, ...updates } : c
     );
-    // Sync legacy fields from first clause for backward compat
     branch.conditions = clauses;
-    branch.field = clauses[0].field;
-    branch.operator = clauses[0].operator;
-    branch.value = clauses[0].value;
-    branch.valueIsVariable = clauses[0].valueIsVariable;
-    branch.valueType = clauses[0].valueType;
     newBranches[branchIdx] = branch;
     onRuleChange({ ...rule, branches: newBranches });
   };
@@ -745,14 +739,11 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
     const newBranches = [...rule.branches];
     const branch = { ...newBranches[branchIdx] };
     const clauses = getBranchClauses(branch).filter((_, i) => i !== clauseIdx);
-    branch.conditions = clauses;
-    if (clauses.length > 0) {
-      branch.field = clauses[0].field;
-      branch.operator = clauses[0].operator;
-      branch.value = clauses[0].value;
-      branch.valueIsVariable = clauses[0].valueIsVariable;
-      branch.valueType = clauses[0].valueType;
+    // Clear logic on the new first clause (it has no predecessor)
+    if (clauses.length > 0 && clauses[0].logic) {
+      clauses[0] = { ...clauses[0], logic: undefined };
     }
+    branch.conditions = clauses;
     newBranches[branchIdx] = branch;
     onRuleChange({ ...rule, branches: newBranches });
   };
@@ -762,9 +753,8 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
       ...rule,
       branches: [...rule.branches, {
         conditions: [{ field: '', operator: '==' as ConditionOperator, value: '', valueType: 'text' as CFValueType }],
-        conditionLogic: 'AND' as const,
-        field: '', operator: '==' as ConditionOperator, value: '', result: '',
-        valueType: 'text' as CFValueType, resultType: 'text' as CFValueType,
+        result: '',
+        resultType: 'text' as CFValueType,
       }],
     });
   };
@@ -804,7 +794,7 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
                       <Select
                         size="small"
                         value={clause.logic ?? 'AND'}
-                        onChange={(val) => updateClause(branchIdx, clauseIdx, 'logic', val as 'AND' | 'OR')}
+                        onChange={(val) => updateClause(branchIdx, clauseIdx, { logic: val as 'AND' | 'OR' })}
                         options={[{ value: 'AND', label: 'AND' }, { value: 'OR', label: 'OR' }]}
                         style={{ width: 68 }}
                       />
@@ -816,16 +806,17 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
                       options={autocompleteOptions}
                       filterOption={filterOption}
                       value={clause.field}
-                      onSelect={(val) => updateClause(branchIdx, clauseIdx, 'field', val)}
-                      onChange={(val) => updateClause(branchIdx, clauseIdx, 'field', val)}
+                      onSelect={(val) => updateClause(branchIdx, clauseIdx, { field: val })}
+                      onChange={(val) => updateClause(branchIdx, clauseIdx, { field: val })}
                       placeholder="field"
+                      popupMatchSelectWidth={220}
                       style={{ width: 100, fontSize: 11 }}
                       size="small"
                     />
                     <Select
                       size="small"
                       value={clause.operator}
-                      onChange={(val) => updateClause(branchIdx, clauseIdx, 'operator', val as ConditionOperator)}
+                      onChange={(val) => updateClause(branchIdx, clauseIdx, { operator: val as ConditionOperator })}
                       style={{ width: 100, fontSize: 11 }}
                       options={OPERATORS}
                     />
@@ -833,18 +824,18 @@ const VisualRuleEditor: React.FC<VisualRuleEditorProps> = ({ rule, onRuleChange,
                       <>
                         <TypeSelector
                           value={vType}
-                          onChange={(t) => {
-                            updateClause(branchIdx, clauseIdx, 'valueType', t);
-                            updateClause(branchIdx, clauseIdx, 'valueIsVariable', t === 'variable' || t === 'field');
-                          }}
+                          onChange={(t) => updateClause(branchIdx, clauseIdx, {
+                            valueType: t,
+                            valueIsVariable: t === 'variable' || t === 'field',
+                          })}
                         />
                         <ValueInput
                           value={clause.value}
                           valueType={vType}
-                          onChange={(val) => {
-                            updateClause(branchIdx, clauseIdx, 'value', val);
-                            updateClause(branchIdx, clauseIdx, 'valueIsVariable', vType === 'variable' || vType === 'field');
-                          }}
+                          onChange={(val) => updateClause(branchIdx, clauseIdx, {
+                            value: val,
+                            valueIsVariable: vType === 'variable' || vType === 'field',
+                          })}
                           autocompleteOptions={autocompleteOptions}
                           filterOption={filterOption}
                           placeholder="value"

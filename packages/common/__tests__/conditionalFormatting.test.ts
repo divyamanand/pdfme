@@ -237,9 +237,11 @@ describe('tryParseExpressionToVisualRule', () => {
     const rule = tryParseExpressionToVisualRule('amount > 1000 ? "High" : "Low"');
     expect(rule).not.toBeNull();
     expect(rule!.branches).toHaveLength(1);
-    expect(rule!.branches[0].field).toBe('amount');
-    expect(rule!.branches[0].operator).toBe('>');
-    expect(rule!.branches[0].value).toBe('1000');
+    const clauses = rule!.branches[0].conditions!;
+    expect(clauses).toHaveLength(1);
+    expect(clauses[0].field).toBe('amount');
+    expect(clauses[0].operator).toBe('>');
+    expect(clauses[0].value).toBe('1000');
     expect(rule!.branches[0].result).toBe('High');
     expect(rule!.defaultResult).toBe('Low');
   });
@@ -247,8 +249,9 @@ describe('tryParseExpressionToVisualRule', () => {
   it('should parse ternary with == operator (string comparison)', () => {
     const rule = tryParseExpressionToVisualRule('status == "active" ? "Yes" : "No"');
     expect(rule).not.toBeNull();
-    expect(rule!.branches[0].operator).toBe('==');
-    expect(rule!.branches[0].value).toBe('active');
+    const clauses = rule!.branches[0].conditions!;
+    expect(clauses[0].operator).toBe('==');
+    expect(clauses[0].value).toBe('active');
   });
 
   it('should return null for non-ternary expressions', () => {
