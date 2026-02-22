@@ -23,7 +23,7 @@ import { getPlugins } from './plugins';
 type FontLoadMode = 'offline' | 'online' | 'hybrid' | 'hybrid-online';
 
 const FONT_LOAD_MODE: FontLoadMode = (
-  import.meta.env.VITE_FONT_MODE || 'offline'
+  import.meta.env.VITE_FONT_MODE || 'online'
 ) as FontLoadMode;
 
 export function fromKebabCase(str: string): string {

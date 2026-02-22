@@ -44,7 +44,7 @@ const embedAndGetFontObj = async (arg: {
   const fontValues = await Promise.all(
     Object.values(font).map(async (v) => {
       let fontData = v.data;
-      if (typeof fontData === 'string' && fontData.startsWith('http')) {
+      if (typeof fontData === 'string' && (fontData.startsWith('http') || fontData.startsWith('/'))) {
         fontData = await fetch(fontData).then((res) => res.arrayBuffer());
       }
       return pdfDoc.embedFont(fontData, {

@@ -2,9 +2,9 @@ import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { cloneDeep, Template, checkTemplate, Lang, isBlankPdf } from "@pdfme/common";
+import { cloneDeep, Template, checkTemplate, Lang, isBlankPdf, Schema } from "@pdfme/common";
 import { Designer } from "@pdfme/ui";
-import { Globe, FileText, Upload, Download, Pencil, Braces, Copy, Play, RotateCcw } from 'lucide-react';
+import { Globe, FileText, Upload, Download, Pencil, Braces, Copy, Play, RotateCcw, Sparkles } from 'lucide-react';
 import {
   getFontsData,
   getTemplateById,
@@ -18,6 +18,7 @@ import { NavBar, NavItem } from "../components/NavBar";
 import { PageSettings } from "../components/PageSettings";
 import { SchemaEditor } from "../components/SchemaEditor";
 import { TemplateTester } from "../components/TemplateTester";
+import { AISchemaGenerator } from "../components/AISchemaGenerator";
 
 function DesignerApp() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,6 +34,7 @@ function DesignerApp() {
   const [totalPages, setTotalPages] = useState(1);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showTester, setShowTester] = useState(false);
+  const [showAI, setShowAI] = useState(false);
   const isUpdatingFromEditor = useRef(false);
   const schemaChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -141,6 +143,29 @@ function DesignerApp() {
       designer.current.updateTemplate(getBlankTemplate());
     }
     setShowResetConfirm(false);
+  };
+
+  const onApplyAISchemas = (schemas: Schema[], mode: 'replace' | 'merge') => {
+    if (!designer.current) return;
+    const currentTemplate = cloneDeep(designer.current.getTemplate());
+    const page = designer.current.getPageCursor();
+
+    if (mode === 'replace') {
+      currentTemplate.schemas[page] = schemas;
+    } else {
+      // Merge: append new schemas to existing page array
+      const existing = currentTemplate.schemas[page] || [];
+      currentTemplate.schemas[page] = [...existing, ...schemas];
+    }
+
+    try {
+      checkTemplate(currentTemplate);
+      designer.current.updateTemplate(currentTemplate);
+      localStorage.setItem("template", JSON.stringify(currentTemplate));
+      toast.success(`${mode === 'replace' ? 'Replaced' : 'Added'} ${schemas.length} schema(s)`);
+    } catch (e) {
+      toast.error(`Invalid schemas: ${(e as Error).message}`);
+    }
   };
 
   const handleSchemaChange = (json: string) => {
@@ -342,6 +367,14 @@ function DesignerApp() {
       onClick: () => setShowTester(true),
     },
     {
+      label: "AI Generator",
+      tooltip: "AI Schema Generator",
+      icon: <Sparkles size={18} />,
+      isIconOnly: true,
+      disabled: editingStaticSchemas,
+      onClick: () => setShowAI(true),
+    },
+    {
       label: "Reset",
       tooltip: "Reset Template",
       icon: <RotateCcw size={18} />,
@@ -378,6 +411,20 @@ function DesignerApp() {
         open={showTester}
         onClose={() => setShowTester(false)}
         designer={designer}
+      />
+
+      {/* AI Schema Generator Panel */}
+      <AISchemaGenerator
+        open={showAI}
+        onClose={() => setShowAI(false)}
+        currentSchemas={
+          designer.current
+            ? (designer.current.getTemplate().schemas[
+                designer.current.getPageCursor()
+              ] || [])
+            : []
+        }
+        onApplySchemas={onApplyAISchemas}
       />
 
       {/* Reset Confirmation Dialog */}
