@@ -23,7 +23,8 @@ const updateVersion = (version) => {
 };
 
 try {
-  const gitTag = execSync('git describe --tags $(git rev-list --tags --max-count=1)', { encoding: 'utf8' }).trim();
+  const latestTagCommit = execSync('git rev-list --tags --max-count=1', { encoding: 'utf8' }).trim();
+  const gitTag = execSync(`git describe --tags ${latestTagCommit}`, { encoding: 'utf8' }).trim();
   updateVersion(gitTag);
 } catch (error) {
   console.error('Error replacing PDFME_VERSION:', error);
