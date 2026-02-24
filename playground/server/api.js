@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai').default;
-const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
@@ -12,66 +11,6 @@ app.use(express.json({ limit: '2mb' }));
 
 const PORT = process.env.API_PORT || 3001;
 
-// ---------------------------------------------------------------------------
-// Zod schemas — mirrors packages/common/src/schema.ts exactly
-// ---------------------------------------------------------------------------
-
-const VALID_TYPES = [
-  'text', 'multiVariableText', 'image', 'table',
-  'qrcode', 'code128', 'ean13', 'ean8', 'code39', 'nw7', 'itf14',
-  'upca', 'upce', 'japanpost', 'gs1datamatrix', 'pdf417',
-  'line', 'rectangle', 'ellipse',
-  'checkbox', 'radioGroup', 'select',
-  'date', 'dateTime', 'time',
-  'svg', 'signature',
-];
-
-/** Core PDFme Schema — required fields + optional known fields + passthrough */
-const PdfmeSchema = z
-  .object({
-    name: z.string().min(1, 'name is required'),
-    type: z.string().refine((t) => VALID_TYPES.includes(t), {
-      message: `type must be one of: ${VALID_TYPES.join(', ')}`,
-    }),
-    content: z.string().optional(),
-    position: z.object({
-      x: z.number().min(0),
-      y: z.number().min(0),
-    }),
-    width: z.number().positive('width must be > 0'),
-    height: z.number().positive('height must be > 0'),
-    rotate: z.number().optional(),
-    opacity: z.number().min(0).max(1).optional(),
-    readOnly: z.boolean().optional(),
-    required: z.boolean().optional(),
-  })
-  .passthrough(); // allow extra type-specific props (fontSize, head, etc.)
-
-/** A page is Schema[] */
-const SchemaPage = z.array(PdfmeSchema).min(1, 'page must have at least 1 schema');
-
-/** Validate unique names within a page */
-function validateUniqueNames(schemas) {
-  const names = schemas.map((s) => s.name);
-  const dups = names.filter((n, i) => names.indexOf(n) !== i);
-  if (dups.length > 0) {
-    return { valid: false, error: `Duplicate schema names: ${[...new Set(dups)].join(', ')}` };
-  }
-  return { valid: true };
-}
-
-/** Request body schema */
-const GenerateRequestBody = z.object({
-  messages: z
-    .array(
-      z.object({
-        role: z.enum(['user', 'assistant']),
-        content: z.string(),
-      })
-    )
-    .min(1, 'messages array must have at least 1 message'),
-  currentSchemas: z.array(z.record(z.string(), z.unknown())).optional(),
-});
 
 // ---------------------------------------------------------------------------
 // Load documentation at startup
@@ -166,15 +105,7 @@ Remember: Output ONLY a valid JSON array. Nothing else.`;
 
 app.post('/api/ai/generate-schema', async (req, res) => {
   try {
-    // ── Validate request body with Zod ──
-    const bodyResult = GenerateRequestBody.safeParse(req.body);
-    if (!bodyResult.success) {
-      return res.status(400).json({
-        error: `Invalid request: ${bodyResult.error.issues.map((i) => i.message).join('; ')}`,
-      });
-    }
-
-    const { messages, currentSchemas } = bodyResult.data;
+    const { messages, currentSchemas } = req.body;
 
     if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
@@ -228,38 +159,9 @@ app.post('/api/ai/generate-schema', async (req, res) => {
       });
     }
 
-    // ── Validate each schema with Zod ──
-    const zodResult = SchemaPage.safeParse(rawParsed);
-
-    if (!zodResult.success) {
-      // Collect human-readable validation errors
-      const issues = zodResult.error.issues.map((issue) => ({
-        path: issue.path.join('.'),
-        message: issue.message,
-      }));
-
-      return res.json({
-        schemas: null,
-        raw: responseText,
-        error: `Schema validation failed: ${issues.map((i) => `[${i.path}] ${i.message}`).join('; ')}`,
-        validationErrors: issues,
-      });
-    }
-
-    // ── Validate unique names ──
-    const uniqueCheck = validateUniqueNames(zodResult.data);
-    if (!uniqueCheck.valid) {
-      return res.json({
-        schemas: null,
-        raw: responseText,
-        error: uniqueCheck.error,
-        validationErrors: [{ path: '', message: uniqueCheck.error }],
-      });
-    }
-
     // ── Success ──
     res.json({
-      schemas: zodResult.data,
+      schemas: rawParsed,
       raw: responseText,
       error: null,
       validationErrors: null,
