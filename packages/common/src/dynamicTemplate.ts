@@ -212,8 +212,12 @@ function processDynamicPage(
   let previousActualEndY = 0;
 
   for (const item of items) {
-    // Only push forward if the previous item overflows into this item's space
-    const currentGlobalStartY = Math.max(item.baseY, previousActualEndY);
+    // Smart spacing: only apply to multi-row schemas (tables) with dynamic heights
+    // Regular schemas with fixed height keep their designed position (allow overlaps)
+    const isMultiRowSchema = item.dynamicHeights.length > 1;
+    const currentGlobalStartY = isMultiRowSchema
+      ? Math.max(item.baseY, previousActualEndY) // Smart spacing for tables
+      : item.baseY; // Keep designed position for regular schemas
 
     const actualGlobalEndY = placeRowsOnPages(
       item.schema,
