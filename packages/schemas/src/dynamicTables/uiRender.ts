@@ -7,16 +7,28 @@
  *
  * Modes:
  * - viewer: Read-only display
- * - designer: Read-only display (pdfme handles resize handles externally)
- * - form: Body cells are editable; changes propagate via onChange
+ * - designer: Full structure editing (add/remove row/col, resize, merge, context menu)
+ * - form: Body cells are editable; add/remove row buttons
  */
 
-import type { UIRenderProps } from '@pdfme/common';
+import type { UIRenderProps, Mode } from '@pdfme/common';
 import cell from '../tables/cell.js';
 import type { Region } from './engine/index.js';
 import type { DynamicTableSchema } from './types.js';
 import { instanceManager } from './instanceManager.js';
 import { toPdfmeCellSchema, getCellDisplayValue } from './helpers/cellSchemaMapper.js';
+import { createActionDispatch } from './actionDispatch.js';
+import { state, resetState } from './uiState.js';
+import {
+  appendAddRowButton,
+  appendRemoveRowButtons,
+  appendAddColumnButton,
+  appendRemoveColumnButtons,
+  appendColumnResizeHandles,
+  appendRowResizeHandles,
+  handleCellClick,
+  attachContextMenu,
+} from './uiComponents/index.js';
 
 const cellUiRender = cell.ui;
 
@@ -30,12 +42,14 @@ const REGION_ORDER: Region[] = ['theader', 'lheader', 'rheader', 'body', 'footer
  * 1. Parse value → Table → RenderableTableInstance (via InstanceManager)
  * 2. Clear rootElement
  * 3. Create absolutely-positioned cell divs based on layout data
- * 4. Delegate each cell's rendering to cellUiRender
- * 5. In form mode: attach edit handlers for body cells
+ * 4. Delegate each cell's rendering to cellUiRender with mode delegation
+ * 5. Append interactive controls based on mode
+ * 6. Auto-fit height
  */
 export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<void> {
-  const { schema, value, rootElement, mode, onChange } = arg;
+  const { schema, value, rootElement, mode, onChange, scale } = arg;
   const { renderable } = instanceManager.getOrCreate(schema.name, value);
+  const dispatch = onChange ? createActionDispatch(schema.name, onChange) : null;
 
   // Clear previous render
   rootElement.innerHTML = '';
@@ -63,68 +77,108 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
 
     const rows = renderable.getRowsInRegion(region);
     for (const row of rows) {
-      for (const [_colIdx, cell] of row.cells) {
+      for (const [colIdx, renderableCell] of row.cells) {
         // Create cell container
         const cellDiv = document.createElement('div');
         cellDiv.style.position = 'absolute';
-        cellDiv.style.left = `${cell.layout.x}mm`;
-        cellDiv.style.top = `${cell.layout.y}mm`;
-        cellDiv.style.width = `${cell.layout.width}mm`;
-        cellDiv.style.height = `${cell.layout.height}mm`;
+        cellDiv.style.left = `${renderableCell.layout.x}mm`;
+        cellDiv.style.top = `${renderableCell.layout.y}mm`;
+        cellDiv.style.width = `${renderableCell.layout.width}mm`;
+        cellDiv.style.height = `${renderableCell.layout.height}mm`;
         cellDiv.style.boxSizing = 'border-box';
-        cellDiv.dataset.cellId = cell.cellID;
+        cellDiv.dataset.cellId = renderableCell.cellID;
         cellDiv.dataset.region = region;
 
+        // Mode-based cell rendering (tables pattern from tables/uiRender.ts:147-154)
+        const isEditing = state.editingCellId === renderableCell.cellID;
+        const isSelected = state.selectedCells.has(renderableCell.cellID);
+
+        let cellMode: Mode = 'viewer';
+        if (mode === 'form') {
+          cellMode = region === 'body' && isEditing && !schema.readOnly ? 'designer' : 'viewer';
+        } else if (mode === 'designer') {
+          cellMode = isEditing ? 'designer' : 'form';
+        }
+
+        // Selection highlight
+        if (isSelected && mode === 'designer') {
+          cellDiv.style.boxShadow = 'inset 0 0 0 2px #2196f3';
+        }
+
+        // Cursor style
+        const isEditable = (mode === 'form' && region === 'body' && !schema.readOnly) || mode === 'designer';
+        cellDiv.style.cursor = isEditable ? 'text' : 'default';
+
         // Map to pdfme cell schema and render
-        const cellSchema = toPdfmeCellSchema(cell, 0, 0);
-        const displayValue = getCellDisplayValue(cell);
+        const cellSchema = toPdfmeCellSchema(renderableCell, 0, 0);
+        const displayValue = getCellDisplayValue(renderableCell);
+
+        const cellId = renderableCell.cellID;
+        const rowIdx = row.rowIndex;
 
         await cellUiRender({
           ...arg,
           schema: cellSchema as any,
           value: displayValue,
           rootElement: cellDiv,
+          mode: cellMode,
+          stopEditing: () => {
+            resetState();
+            void uiRender(arg);
+          },
+          onChange: (v) => {
+            if (!dispatch) return;
+            const newVal = (Array.isArray(v) ? v[0].value : v.value) as string;
+            dispatch.updateCell(cellId, newVal);
+          },
         });
 
-        // Form mode: make body cells editable
-        if (mode === 'form' && region === 'body' && onChange && !schema.readOnly) {
-          attachEditHandler(cellDiv, cell.cellID, schema.name, onChange);
-        }
+        // Click handler for cell selection and editing
+        cellDiv.addEventListener('click', (e) => {
+          if (mode === 'viewer') return;
+          if (mode === 'form' && region !== 'body') return;
+          if (mode === 'form' && schema.readOnly) return;
+
+          if (mode === 'designer') {
+            handleCellClick(cellId, rowIdx, colIdx, region, e.shiftKey, renderable);
+          }
+
+          state.editingCellId = cellId;
+          void uiRender(arg);
+        });
 
         rootElement.appendChild(cellDiv);
       }
     }
   }
-}
 
-/**
- * Attach a blur-based edit handler to a cell div for form mode.
- */
-function attachEditHandler(
-  cellDiv: HTMLDivElement,
-  cellId: string,
-  schemaName: string,
-  onChange: (arg: { key: string; value: unknown } | { key: string; value: unknown }[]) => void,
-): void {
-  // Find the text div inside the cell
-  const textDiv = cellDiv.querySelector('div') as HTMLDivElement | null;
-  if (!textDiv) return;
+  // Form mode controls
+  if (mode === 'form' && dispatch && !schema.readOnly) {
+    appendAddRowButton(rootElement, renderable, dispatch);
+    appendRemoveRowButtons(rootElement, renderable, dispatch);
+  }
 
-  textDiv.contentEditable = 'true';
-  textDiv.style.cursor = 'text';
-  textDiv.style.outline = 'none';
+  // Designer mode controls
+  if (mode === 'designer' && dispatch) {
+    appendAddRowButton(rootElement, renderable, dispatch);
+    appendRemoveRowButtons(rootElement, renderable, dispatch);
+    appendAddColumnButton(rootElement, renderable, dispatch);
+    appendRemoveColumnButtons(rootElement, renderable, dispatch);
+    appendColumnResizeHandles(rootElement, renderable, dispatch, scale);
+    appendRowResizeHandles(rootElement, renderable, dispatch, scale);
+    attachContextMenu(rootElement, renderable, dispatch, uiRender, arg);
+  }
 
-  const originalValue = textDiv.textContent || '';
+  // Viewer mode: reset editing state
+  if (mode === 'viewer') {
+    resetState();
+  }
 
-  textDiv.addEventListener('blur', () => {
-    const newValue = textDiv.textContent || '';
-    if (newValue === originalValue) return;
-
-    // Update the table instance and push new value to pdfme
-    const newSerializedValue = instanceManager.update(schemaName, (table) => {
-      table.updateCell(cellId, { rawValue: newValue });
-    });
-
-    onChange({ key: 'content', value: newSerializedValue });
-  });
+  // Auto-fit height
+  if (onChange) {
+    const tableHeight = renderable.getHeight();
+    if (Math.abs(schema.height - tableHeight) > 0.01) {
+      onChange({ key: 'height', value: tableHeight });
+    }
+  }
 }

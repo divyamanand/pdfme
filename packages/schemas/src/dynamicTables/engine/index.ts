@@ -44,7 +44,13 @@ export type {
   CellStyle,
   CellLayout,
   TableStyle,
+  RegionStyle,
+  BodyRegionStyle,
   RegionStyleMap,
   TableSettings,
+  HeaderVisibility,
+  OverflowMode,
   Spacing,
+  Rect,
+  CellPayload,
 } from './types/common';
