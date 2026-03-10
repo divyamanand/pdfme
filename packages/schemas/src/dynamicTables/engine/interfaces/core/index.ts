@@ -1,0 +1,1 @@
+export type { ICell } from './cell.interface';
