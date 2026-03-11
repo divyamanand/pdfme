@@ -95,10 +95,13 @@ export class LayoutEngine implements ILayoutEngine {
                 walkTree(root)
         }
     
-        // Walk body cells
+        // Walk body cells (skip cells hidden by merges)
         for (const row of this.structureStore.getBody())
-            for (const cellId of row)
+            for (const cellId of row) {
+                const cell = this.cellRegistry.getCellById(cellId) as Cell
+                if (cell?.layout && cell.layout.rowSpan === 0 && cell.layout.colSpan === 0) continue
                 computeForCell(cellId)
+            }
 
         // Footer geometry (independent prefix sums, Y offset = main table height)
         // Footer cells use global coordinates; map to local indices for footer dimension arrays
@@ -257,11 +260,22 @@ export class LayoutEngine implements ILayoutEngine {
                     rowSpan = endRow - startRow + 1
                     colSpan = endCol - startCol + 1
 
-                    // mark children as skipped (body-local coords)
+                    // mark children as skipped and hidden (body-local coords)
                     for (let mr = r; mr < r + rowSpan; mr++) {
                         for (let mc = c; mc < c + colSpan; mc++) {
                             if (mr !== r || mc !== c) {
                                 skips.add(`${mr}:${mc}`)
+                                // Mark covered cell as hidden so renderers skip it
+                                const coveredId = body[mr]?.[mc]
+                                if (coveredId) {
+                                    const coveredCell = this.cellRegistry.getCellById(coveredId) as Cell
+                                    if (coveredCell) {
+                                        const coveredRow = rowOffset + mr
+                                        const coveredCol = colOffset + mc
+                                        coveredCell._setLayout({ row: coveredRow, col: coveredCol, rowSpan: 0, colSpan: 0, x: 0, y: 0, width: 0, height: 0 })
+                                        this.cellRegistry.setCellAddress(coveredId, `${coveredRow},${coveredCol}`)
+                                    }
+                                }
                             }
                         }
                     }
