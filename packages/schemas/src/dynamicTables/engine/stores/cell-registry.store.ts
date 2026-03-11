@@ -27,6 +27,12 @@ export class CellRegistry implements ICellRegistry {
         if (cell) {
             // Clear the old address if this cellId already has one
             this.clearCellAddress(cellId)
+            // If another cell currently occupies this address, unlink it
+            // so its later clearCellAddress won't corrupt this mapping
+            const displaced = this.cellsByAddress.get(key)
+            if (displaced && displaced.cellID !== cellId) {
+                this.cellIdToAddress.delete(displaced.cellID)
+            }
             this.cellsByAddress.set(key, cell)
             this.cellIdToAddress.set(cellId, key)
         }
