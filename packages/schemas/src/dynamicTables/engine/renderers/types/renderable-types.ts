@@ -34,6 +34,7 @@ export interface RenderableCell {
  */
 export interface RenderableRow {
   rowIndex: number
+  globalRowIndex: number  // index into the dimension array (main rowHeights or footer rowHeights)
   region: Region
   height: number  // calculated row height
 
@@ -76,6 +77,7 @@ export interface RenderableTableInstance {
 
   // Structural
   columns: RenderableColumn[]
+  footerColumns: RenderableColumn[]
 
   // Regions as maps for efficient access
   regions: {

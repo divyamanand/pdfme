@@ -214,6 +214,14 @@ export class Table implements ITable {
         for (let i = 0; i < rowHeights.length; i++) {
             this.layoutEngine.setRowHeight(i, defaultH)
         }
+        const footerColWidths = this.layoutEngine.getFooterColumnWidths()
+        const footerRowHeights = this.layoutEngine.getFooterRowHeights()
+        for (let i = 0; i < footerColWidths.length; i++) {
+            this.layoutEngine.setFooterColumnWidth(i, defaultW)
+        }
+        for (let i = 0; i < footerRowHeights.length; i++) {
+            this.layoutEngine.setFooterRowHeight(i, defaultH)
+        }
     }
 
     // --- Styles ---
@@ -519,6 +527,26 @@ export class Table implements ITable {
         return this.layoutEngine.getRowHeights()
     }
 
+    // --- Footer Geometry (independent) ---
+
+    setFooterColumnWidth(colIndex: number, width: number): void {
+        this.layoutEngine.setFooterColumnWidth(colIndex, width)
+        this.rebuildGeometryAndEvaluate()
+    }
+
+    setFooterRowHeight(rowIndex: number, height: number): void {
+        this.layoutEngine.setFooterRowHeight(rowIndex, height)
+        this.rebuildGeometryAndEvaluate()
+    }
+
+    getFooterColumnWidths(): number[] {
+        return this.layoutEngine.getFooterColumnWidths()
+    }
+
+    getFooterRowHeights(): number[] {
+        return this.layoutEngine.getFooterRowHeights()
+    }
+
     setTablePosition(position: { x: number; y: number }): void {
         this.layoutEngine.setTablePosition(position)
     }
@@ -584,6 +612,8 @@ export class Table implements ITable {
         const regionStyles = this.getRegionStyles()
         const columnWidths = this.getColumnWidths()
         const rowHeights = this.getRowHeights()
+        const footerColumnWidths = this.getFooterColumnWidths()
+        const footerRowHeights = this.getFooterRowHeights()
         const uiState = this.getUIState()
 
         const cellsById = new Map<string, RenderableCell>()
@@ -597,41 +627,48 @@ export class Table implements ITable {
             theader: 0, lheader: 0, rheader: 0, footer: 0, body: 0,
         }
 
-        const regionList: Region[] = ['theader', 'lheader', 'rheader', 'footer', 'body']
+        // Helper to build a RenderableCell from a cell interface
+        const buildRenderableCell = (cell: ICell): RenderableCell => {
+            const evalResult = cell.isDynamic ? this.getEvaluationResult(cell.cellID) : undefined
+            if (evalResult) evaluationResults.set(cell.cellID, evalResult)
+
+            const regionStyle = regionStyles[cell.inRegion]
+            const overflowPatch = this.getOverflowStylePatch(cell.cellID)
+            const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides, overflowPatch)
+
+            return {
+                cellID: cell.cellID,
+                rawValue: cell.rawValue,
+                computedValue: cell.computedValue,
+                layout: cell.layout!,
+                style: resolvedStyle,
+                inRegion: cell.inRegion,
+                evaluationResult: evalResult,
+                isDynamic: cell.isDynamic,
+                mergeRect: undefined,
+            }
+        }
+
+        // Main grid: theader + lheader + rheader + body (NOT footer)
+        const mainRegionList: Region[] = ['theader', 'lheader', 'rheader', 'body']
 
         for (let rowIdx = 0; rowIdx < rowHeights.length; rowIdx++) {
-            const rowCellsByRegion: Record<Region, RenderableCell[]> = {
-                theader: [], lheader: [], rheader: [], footer: [], body: [],
+            const rowCellsByRegion: Record<string, RenderableCell[]> = {
+                theader: [], lheader: [], rheader: [], body: [],
             }
 
             for (let colIdx = 0; colIdx < columnWidths.length; colIdx++) {
                 const cell = this.getCellByAddress(rowIdx, colIdx)
                 if (cell) {
-                    const evalResult = cell.isDynamic ? this.getEvaluationResult(cell.cellID) : undefined
-                    if (evalResult) evaluationResults.set(cell.cellID, evalResult)
-
-                    const regionStyle = regionStyles[cell.inRegion]
-                    const overflowPatch = this.getOverflowStylePatch(cell.cellID)
-                    const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides, overflowPatch)
-
-                    const renderableCell: RenderableCell = {
-                        cellID: cell.cellID,
-                        rawValue: cell.rawValue,
-                        computedValue: cell.computedValue,
-                        layout: cell.layout!,
-                        style: resolvedStyle,
-                        inRegion: cell.inRegion,
-                        evaluationResult: evalResult,
-                        isDynamic: cell.isDynamic,
-                        mergeRect: undefined,
-                    }
-
+                    const renderableCell = buildRenderableCell(cell)
                     cellsById.set(cell.cellID, renderableCell)
-                    rowCellsByRegion[cell.inRegion].push(renderableCell)
+                    if (rowCellsByRegion[cell.inRegion]) {
+                        rowCellsByRegion[cell.inRegion].push(renderableCell)
+                    }
                 }
             }
 
-            for (const region of regionList) {
+            for (const region of mainRegionList) {
                 if (rowCellsByRegion[region].length > 0) {
                     const cells = new Map<number, RenderableCell>()
                     const rawValues: (string | number)[] = []
@@ -643,6 +680,7 @@ export class Table implements ITable {
                     }
                     regions[region].push({
                         rowIndex: rowIndexByRegion[region],
+                        globalRowIndex: rowIdx,
                         region,
                         height: rowHeights[rowIdx] || 20,
                         cells,
@@ -653,7 +691,57 @@ export class Table implements ITable {
             }
         }
 
+        // Footer region: walk footer tree independently
+        // Footer cells use global coords; map to local row indices for dimension lookup
+        const footerRowStart = rowHeights.length  // = thD + bodyRows
+        const footerCellsByLocalRow = new Map<number, ICell[]>()
+        const walkFooterTree = (cellId: string) => {
+            const cell = this.getCellById(cellId)
+            if (cell?.layout && cell.layout.rowSpan > 0 && cell.layout.colSpan > 0) {
+                const localRow = cell.layout.row - footerRowStart
+                if (!footerCellsByLocalRow.has(localRow)) footerCellsByLocalRow.set(localRow, [])
+                footerCellsByLocalRow.get(localRow)!.push(cell)
+            }
+            const children = this.structureStore.getChildren(cellId)
+            if (children) {
+                for (const child of children) walkFooterTree(child)
+            }
+        }
+        const footerRoots = this.structureStore.getRoots('footer')
+        if (footerRoots) {
+            for (const root of footerRoots) walkFooterTree(root)
+        }
+
+        const sortedFooterRows = [...footerCellsByLocalRow.keys()].sort((a, b) => a - b)
+        for (const localRowIdx of sortedFooterRows) {
+            const rowCells = footerCellsByLocalRow.get(localRowIdx)!
+            rowCells.sort((a, b) => a.layout!.col - b.layout!.col)
+            const cells = new Map<number, RenderableCell>()
+            const rawValues: (string | number)[] = []
+            let colIdx = 0
+            for (const cell of rowCells) {
+                const renderableCell = buildRenderableCell(cell)
+                cellsById.set(cell.cellID, renderableCell)
+                cells.set(colIdx, renderableCell)
+                rawValues.push(cell.rawValue)
+                colIdx++
+            }
+            regions.footer.push({
+                rowIndex: localRowIdx,
+                globalRowIndex: localRowIdx,
+                region: 'footer',
+                height: footerRowHeights[localRowIdx] || this.layoutEngine.getDefaultCellHeight(),
+                cells,
+                rawValues,
+            })
+        }
+
         const columns: RenderableColumn[] = columnWidths.map((width, idx) => ({
+            colIndex: idx,
+            width,
+        }))
+
+        const footerColumns: RenderableColumn[] = footerColumnWidths.map((width, idx) => ({
             colIndex: idx,
             width,
         }))
@@ -679,14 +767,18 @@ export class Table implements ITable {
         const getFooterHeight = (): number =>
             regions.footer.reduce((s, r) => s + r.height, 0)
 
-        const getWidth = (): number =>
+        const getMainWidth = (): number =>
             columns.reduce((s, c) => s + c.width, 0)
+
+        const getFooterWidth = (): number =>
+            footerColumns.reduce((s, c) => s + c.width, 0)
 
         return {
             settings,
             tableStyle,
             regionStyles,
             columns,
+            footerColumns,
             regions,
             cellsById,
             merges,
@@ -696,7 +788,7 @@ export class Table implements ITable {
             getCellAt(row, col, region) { return this.regions[region][row]?.cells.get(col) },
             getCellByID(cellID) { return this.cellsById.get(cellID) },
             getRowsInRegion(region) { return this.regions[region] },
-            getWidth() { return getWidth() },
+            getWidth() { return Math.max(getMainWidth(), getFooterWidth()) },
             getHeight() { return getHeadHeight() + getBodyHeight() + getFooterHeight() },
             getHeadHeight() { return getHeadHeight() },
             getBodyHeight() { return getBodyHeight() },
@@ -757,6 +849,8 @@ export class Table implements ITable {
             regionStyles: { ...this._regionStyles },
             columnWidths: [...this.layoutEngine.getColumnWidths()],
             rowHeights: [...this.layoutEngine.getRowHeights()],
+            footerColumnWidths: [...this.layoutEngine.getFooterColumnWidths()],
+            footerRowHeights: [...this.layoutEngine.getFooterRowHeights()],
             rules,
         }
     }
@@ -828,6 +922,24 @@ export class Table implements ITable {
                 layoutEngine.setRowHeight(i, data.rowHeights[i])
             } else {
                 layoutEngine.insertRowHeight(i, data.rowHeights[i])
+            }
+        }
+
+        // Restore footer dimensions (independent from main grid)
+        const footerColWidths = data.footerColumnWidths ?? []
+        for (let i = 0; i < footerColWidths.length; i++) {
+            if (i < layoutEngine.getFooterColumnWidths().length) {
+                layoutEngine.setFooterColumnWidth(i, footerColWidths[i])
+            } else {
+                layoutEngine.insertFooterColumnWidth(i, footerColWidths[i])
+            }
+        }
+        const footerRowHts = data.footerRowHeights ?? []
+        for (let i = 0; i < footerRowHts.length; i++) {
+            if (i < layoutEngine.getFooterRowHeights().length) {
+                layoutEngine.setFooterRowHeight(i, footerRowHts[i])
+            } else {
+                layoutEngine.insertFooterRowHeight(i, footerRowHts[i])
             }
         }
 

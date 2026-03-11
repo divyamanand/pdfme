@@ -40,5 +40,7 @@ export interface TableExportData {
   regionStyles: RegionStyleMap
   columnWidths: number[]
   rowHeights: number[]
+  footerColumnWidths: number[]
+  footerRowHeights: number[]
   rules: RulePayload[]
 }

@@ -12,7 +12,7 @@ export interface ILayoutEngine {
     applyHeaderLayout(region: Region, rowOffset: number, colOffset: number): void
     applyBodyLayout(rowOffset: number, colOffset: number): void
 
-    // Dimension arrays (LayoutEngine owns these)
+    // Main grid dimension arrays (theader + lheader + rheader + body)
     setColumnWidth(colIndex: number, width: number): void
     setRowHeight(rowIndex: number, height: number): void
     insertColumnWidth(colIndex: number, width: number): void
@@ -25,6 +25,16 @@ export interface ILayoutEngine {
     getDefaultCellHeight(): number
     getColumnWidths(): number[]
     getRowHeights(): number[]
+
+    // Footer dimension arrays (independent from main grid)
+    setFooterColumnWidth(colIndex: number, width: number): void
+    setFooterRowHeight(rowIndex: number, height: number): void
+    insertFooterColumnWidth(colIndex: number, width: number): void
+    removeFooterColumnWidth(colIndex: number): void
+    insertFooterRowHeight(rowIndex: number, height: number): void
+    removeFooterRowHeight(rowIndex: number): void
+    getFooterColumnWidths(): number[]
+    getFooterRowHeights(): number[]
 
     // Table position (renderer offset)
     setTablePosition(position: TablePosition): void

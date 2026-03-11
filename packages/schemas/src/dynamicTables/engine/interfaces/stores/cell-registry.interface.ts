@@ -14,6 +14,6 @@ export interface ICellRegistry {
     getCellByAddress(address: string): ICell | undefined
     updateCell(cellId: string, payload: CellPayload): void
     deleteCell(cellId: string): void
-    setCellAddress(cellId: string, row: number, col: number): void
+    setCellAddress(cellId: string, address: string): void
     clearCellAddress(cellId: string): void
 }

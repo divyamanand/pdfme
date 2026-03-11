@@ -8,6 +8,8 @@ export class LayoutEngine implements ILayoutEngine {
     private tablePosition: TablePosition = { x: 0, y: 0 }
     private columnWidths: number[] = []
     private rowHeights: number[] = []
+    private footerColumnWidths: number[] = []
+    private footerRowHeights: number[] = []
     private defaultCellWidth: number = 30    // mm
     private defaultCellHeight: number = 10   // mm
     
@@ -30,21 +32,33 @@ export class LayoutEngine implements ILayoutEngine {
         const thD = (this.structureStore.getRoots("theader") ?? [])
             .reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
         const bodyRows = this.structureStore.getBody().length
-        const footerD = (this.structureStore.getRoots("footer") ?? [])
-            .reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
-        const totalRows = thD + bodyRows + footerD
+        const totalRows = thD + bodyRows
     
-        // Grow arrays if needed (pad with defaults), never shrink automatically
+        // Main grid arrays (theader + lheader + rheader + body)
         while (this.columnWidths.length < totalCols)
             this.columnWidths.push(this.defaultCellWidth)
         while (this.rowHeights.length < totalRows)
             this.rowHeights.push(this.defaultCellHeight)
     
-        // Trim if grid shrank (e.g. after delete)
         if (this.columnWidths.length > totalCols)
             this.columnWidths.length = totalCols
         if (this.rowHeights.length > totalRows)
             this.rowHeights.length = totalRows
+
+        // Footer arrays (independent from main grid)
+        const footerD = (this.structureStore.getRoots("footer") ?? [])
+            .reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
+        const footerL = this.structureStore.getLeafCount("footer")
+
+        while (this.footerColumnWidths.length < footerL)
+            this.footerColumnWidths.push(this.defaultCellWidth)
+        while (this.footerRowHeights.length < footerD)
+            this.footerRowHeights.push(this.defaultCellHeight)
+
+        if (this.footerColumnWidths.length > footerL)
+            this.footerColumnWidths.length = footerL
+        if (this.footerRowHeights.length > footerD)
+            this.footerRowHeights.length = footerD
     }
     
     // Compute x/y/width/height via prefix sums
@@ -70,8 +84,8 @@ export class LayoutEngine implements ILayoutEngine {
             cell._setLayout({ ...layout, x, y, width, height })
         }
     
-        // Walk header trees
-        for (const region of ['theader', 'lheader', 'rheader', 'footer'] as const) {
+        // Walk non-footer header trees
+        for (const region of ['theader', 'lheader', 'rheader'] as const) {
             const walkTree = (cellId: string) => {
                 computeForCell(cellId)
                 for (const child of this.structureStore.getChildren(cellId) ?? [])
@@ -85,6 +99,44 @@ export class LayoutEngine implements ILayoutEngine {
         for (const row of this.structureStore.getBody())
             for (const cellId of row)
                 computeForCell(cellId)
+
+        // Footer geometry (independent prefix sums, Y offset = main table height)
+        // Footer cells use global coordinates; map to local indices for footer dimension arrays
+        const footerColStart = (this.structureStore.getRoots("lheader") ?? [])
+            .reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
+        const footerRowStart = this.rowHeights.length  // = thD + bodyRows
+
+        const footerColPrefixSums = [0]
+        for (let i = 0; i < this.footerColumnWidths.length; i++)
+            footerColPrefixSums.push(footerColPrefixSums[i] + this.footerColumnWidths[i])
+
+        const mainTableHeight = rowPrefixSums[rowPrefixSums.length - 1] ?? 0
+        const footerRowPrefixSums = [mainTableHeight]
+        for (let i = 0; i < this.footerRowHeights.length; i++)
+            footerRowPrefixSums.push(footerRowPrefixSums[i] + this.footerRowHeights[i])
+
+        const computeForFooterCell = (cellId: string) => {
+            const cell = this.cellRegistry.getCellById(cellId) as Cell
+            const layout = cell.layout
+            if (!layout) return
+
+            const localCol = layout.col - footerColStart
+            const localRow = layout.row - footerRowStart
+            const x = footerColPrefixSums[localCol] ?? 0
+            const y = footerRowPrefixSums[localRow] ?? mainTableHeight
+            const width = (footerColPrefixSums[localCol + layout.colSpan] ?? footerColPrefixSums[footerColPrefixSums.length - 1]) - x
+            const height = (footerRowPrefixSums[localRow + layout.rowSpan] ?? footerRowPrefixSums[footerRowPrefixSums.length - 1]) - y
+
+            cell._setLayout({ ...layout, x, y, width, height })
+        }
+
+        const walkFooterTree = (cellId: string) => {
+            computeForFooterCell(cellId)
+            for (const child of this.structureStore.getChildren(cellId) ?? [])
+                walkFooterTree(child)
+        }
+        for (const root of this.structureStore.getRoots('footer') ?? [])
+            walkFooterTree(root)
     }
     
     private calculateColSpan(cellId: string, res: Map<string, number>): number {
@@ -126,7 +178,7 @@ export class LayoutEngine implements ILayoutEngine {
         secondaryStart: number,
         primarySpanMap: Map<string, number>,
         secondarySpanMap: Map<string, number>,
-        orientation: "horizontal" | "vertical"
+        orientation: "horizontal" | "vertical",
     ): void {
         const cell = this.cellRegistry.getCellById(cellId) as Cell
         const primarySpan = primarySpanMap.get(cellId) ?? 1
@@ -138,7 +190,7 @@ export class LayoutEngine implements ILayoutEngine {
         const colSpan = orientation === "horizontal" ? primarySpan : secondarySpan
 
         cell._setLayout({ row, col, rowSpan, colSpan, x: 0, y: 0, width: 0, height: 0 })
-        this.cellRegistry.setCellAddress(cellId, row, col)
+        this.cellRegistry.setCellAddress(cellId, `${row},${col}`)
 
         let childPrimaryStart = primaryStart
         for (const child of this.structureStore.getChildren(cellId) ?? []) {
@@ -148,7 +200,7 @@ export class LayoutEngine implements ILayoutEngine {
                 secondaryStart + secondarySpan,
                 primarySpanMap,
                 secondarySpanMap,
-                orientation
+                orientation,
             )
             childPrimaryStart += primarySpanMap.get(child) ?? 1
         }
@@ -180,7 +232,7 @@ export class LayoutEngine implements ILayoutEngine {
                 fixedOffset,
                 primarySpanMap,
                 secondarySpanMap,
-                orientation
+                orientation,
             )
 
             advancingStart += primarySpanMap.get(root) ?? 1
@@ -219,7 +271,7 @@ export class LayoutEngine implements ILayoutEngine {
                 const col = colOffset + c
                 const cell = this.cellRegistry.getCellById(cellId) as Cell
                 cell._setLayout({ row, col, rowSpan, colSpan, x: 0, y: 0, width: 0, height: 0 })
-                this.cellRegistry.setCellAddress(cellId, row, col)
+                this.cellRegistry.setCellAddress(cellId, `${row},${col}`)
             }
         }
     }
@@ -298,6 +350,36 @@ export class LayoutEngine implements ILayoutEngine {
         this.rowHeights.splice(rowIndex, 1)
     }
 
+    // Footer dimension management (independent from main grid)
+    setFooterColumnWidth(colIndex: number, width: number): void {
+        if (colIndex >= 0 && colIndex < this.footerColumnWidths.length)
+            this.footerColumnWidths[colIndex] = width
+    }
+
+    setFooterRowHeight(rowIndex: number, height: number): void {
+        if (rowIndex >= 0 && rowIndex < this.footerRowHeights.length)
+            this.footerRowHeights[rowIndex] = height
+    }
+
+    insertFooterColumnWidth(colIndex: number, width: number): void {
+        this.footerColumnWidths.splice(colIndex, 0, width)
+    }
+
+    removeFooterColumnWidth(colIndex: number): void {
+        this.footerColumnWidths.splice(colIndex, 1)
+    }
+
+    insertFooterRowHeight(rowIndex: number, height: number): void {
+        this.footerRowHeights.splice(rowIndex, 0, height)
+    }
+
+    removeFooterRowHeight(rowIndex: number): void {
+        this.footerRowHeights.splice(rowIndex, 1)
+    }
+
+    getFooterColumnWidths(): number[] { return [...this.footerColumnWidths] }
+    getFooterRowHeights(): number[] { return [...this.footerRowHeights] }
+
     setDefaultCellWidth(width: number): void { this.defaultCellWidth = width }
     setDefaultCellHeight(height: number): void { this.defaultCellHeight = height }
     getDefaultCellWidth(): number { return this.defaultCellWidth }
@@ -330,6 +412,7 @@ export class LayoutEngine implements ILayoutEngine {
         // Body layout already handles merges internally
         this.applyBodyLayout(thD, lhD)
 
+        // Footer uses global coordinates but independent dimension arrays for resizing
         this.applyHeaderLayout("footer", thD + bodyRows, lhD)
         this.applyHeaderMerges("footer")
     }

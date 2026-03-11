@@ -642,6 +642,18 @@ export function structureWidget(props: PropPanelWidgetProps): void {
       table.updateSettings({ footer: undefined });
     }
     commit();
+  }, () => {
+    const container = document.createElement('div');
+    container.style.paddingLeft = '12px';
+    renderHeaderTree(container, footerNodes, 'footer' as Region, getTC);
+    const addBtn = createSmallButton('+', 'Add footer cell', () => {
+      const { table, commit } = getTC();
+      table.addHeaderCell('footer' as Region);
+      commit();
+    });
+    addBtn.style.marginTop = '4px';
+    container.appendChild(addBtn);
+    return container;
   });
 
   // --- Merge / Unmerge ---
@@ -740,11 +752,11 @@ function renderHeaderTree(
     label.textContent = String(node.rawValue || node.cellId.slice(0, 6));
     nodeRow.appendChild(label);
 
-    // Sub-header button (theader only)
-    if (region === 'theader') {
-      nodeRow.appendChild(createSmallButton('+', 'Add sub-header', () => {
+    // Add child button for all header regions (theader, lheader, rheader, footer)
+    if (region !== 'body') {
+      nodeRow.appendChild(createSmallButton('+', 'Add child', () => {
         const { table, commit } = getTC();
-        table.addHeaderCell('theader' as Region, node.cellId);
+        table.addHeaderCell(region, node.cellId);
         commit();
       }));
     }

@@ -49,6 +49,12 @@ export interface ITable {
     setTablePosition(position: TablePosition): void
     getTablePosition(): TablePosition
 
+    // Footer Geometry (independent)
+    setFooterColumnWidth(colIndex: number, width: number): void
+    setFooterRowHeight(rowIndex: number, height: number): void
+    getFooterColumnWidths(): number[]
+    getFooterRowHeights(): number[]
+
     // Layout
     getCompleteGrid(): string[][]
 

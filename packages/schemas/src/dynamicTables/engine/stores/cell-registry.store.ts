@@ -21,12 +21,8 @@ export class CellRegistry implements ICellRegistry {
         this.cellsByAddress = new Map()
     }
 
-    private toAddressKey(row: number, col: number): string {
-        return `${row},${col}`
-    }
-
-    setCellAddress(cellId: string, row: number, col: number): void {
-        const key = this.toAddressKey(row, col)
+    setCellAddress(cellId: string, address: string): void {
+        const key = address
         const cell = this.cellsById.get(cellId)
         if (cell) {
             // Clear the old address if this cellId already has one
