@@ -71,6 +71,7 @@ export function buildMergeRect(
   let maxCol = -Infinity;
   let primaryRegion: Region | undefined;
   let firstCellId: string | undefined;
+  let totalCoveredCells = 0;
 
   for (const cellId of selected) {
     const cell = snapshot.getCellByID(cellId);
@@ -83,19 +84,32 @@ export function buildMergeRect(
       return null;
     }
 
+    const cellEndRow = cell.layout.row + cell.layout.rowSpan - 1;
+    const cellEndCol = cell.layout.col + cell.layout.colSpan - 1;
     minRow = Math.min(minRow, cell.layout.row);
-    maxRow = Math.max(maxRow, cell.layout.row);
+    maxRow = Math.max(maxRow, cellEndRow);
     minCol = Math.min(minCol, cell.layout.col);
-    maxCol = Math.max(maxCol, cell.layout.col);
+    maxCol = Math.max(maxCol, cellEndCol);
+    totalCoveredCells += cell.layout.rowSpan * cell.layout.colSpan;
   }
 
   if (!firstCellId || !primaryRegion) return null;
 
   const expectedCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
-  if (selected.size !== expectedCount) return null;
+  if (totalCoveredCells !== expectedCount) return null;
+
+  // Use the cell at (minRow, minCol) as the merge root
+  let rootCellId = firstCellId;
+  for (const cellId of selected) {
+    const cell = snapshot.getCellByID(cellId)!;
+    if (cell.layout.row === minRow && cell.layout.col === minCol) {
+      rootCellId = cellId;
+      break;
+    }
+  }
 
   return {
-    cellId: firstCellId,
+    cellId: rootCellId,
     startRow: minRow,
     startCol: minCol,
     endRow: maxRow,

@@ -785,96 +785,120 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   // --- Merge / Unmerge ---
   const mergeSection = document.createElement('div');
   Object.assign(mergeSection.style, { marginTop: '8px', padding: '6px', background: '#f9f9f9', borderRadius: '4px' });
-  const mergeTitle = document.createElement('div');
-  Object.assign(mergeTitle.style, { fontSize: '12px', fontWeight: '600', marginBottom: '6px' });
-  mergeTitle.textContent = 'Merge / Unmerge';
-  mergeSection.appendChild(mergeTitle);
+  rootElement.appendChild(mergeSection);
 
-  // Determine current merge mode from the live Table instance
-  const { table: mergeTable } = getTC();
-  const currentMergeMode = mergeTable.getUIState().mergeMode;
+  /** Rebuild merge section content based on current merge mode */
+  function renderMergeSection() {
+    mergeSection.innerHTML = '';
+    const title = document.createElement('div');
+    Object.assign(title.style, { fontSize: '12px', fontWeight: '600', marginBottom: '6px' });
+    title.textContent = 'Merge / Unmerge';
+    mergeSection.appendChild(title);
 
-  if (currentMergeMode === 'selecting') {
-    // Show confirm / cancel buttons while selecting
-    const info = document.createElement('div');
-    Object.assign(info.style, { fontSize: '11px', color: '#ff9800', marginBottom: '4px' });
-    info.textContent = 'Click cells on canvas to select, then confirm.';
-    mergeSection.appendChild(info);
+    const { table: mTable } = getTC();
+    const mode = mTable.getUIState().mergeMode;
 
-    const btnRow = createRow();
-    btnRow.appendChild(createSmallButton('✓ Confirm', 'Merge selected cells', () => {
-      const { table, commit } = getTC();
-      const snapshot = table.getRenderSnapshot();
-      const rect = buildMergeRect(table, snapshot);
-      if (!rect) {
-        showToast('Select a rectangular block of ≥2 cells in the same region');
-        return;
-      }
-      table.mergeCells(rect);
-      table.setMergeMode('none');
-      commit();
-    }));
-    btnRow.appendChild(createSmallButton('✕ Cancel', 'Cancel merge selection', () => {
-      const { table, commit } = getTC();
-      table.setMergeMode('none');
-      commit();
-    }));
-    mergeSection.appendChild(btnRow);
-  } else if (currentMergeMode === 'unmerging') {
-    const info = document.createElement('div');
-    Object.assign(info.style, { fontSize: '11px', color: '#f44336', marginBottom: '4px' });
-    info.textContent = 'Click a merged cell on canvas to unmerge it.';
-    mergeSection.appendChild(info);
+    const mkBtn = (text: string, tip: string, onClick: () => void) => {
+      const btn = document.createElement('button');
+      btn.textContent = text;
+      btn.title = tip;
+      Object.assign(btn.style, {
+        padding: '2px 8px',
+        border: '1px solid #ccc',
+        borderRadius: '3px',
+        background: '#fafafa',
+        cursor: 'pointer',
+        fontSize: '11px',
+        lineHeight: '18px',
+        whiteSpace: 'nowrap',
+      });
+      btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+      return btn;
+    };
 
-    const btnRow = createRow();
-    btnRow.appendChild(createSmallButton('✕ Cancel', 'Cancel unmerge', () => {
-      const { table, commit } = getTC();
-      table.setMergeMode('none');
-      commit();
-    }));
-    mergeSection.appendChild(btnRow);
-  } else {
-    // Normal mode: show merge + unmerge buttons
-    const btnRow = createRow();
-    btnRow.appendChild(createSmallButton('⊞ Merge', 'Select cells on canvas to merge', () => {
-      const { table, commit } = getTC();
-      table.setMergeMode('selecting');
-      commit();
-    }));
-    const mergeCount = parsed.merges?.length ?? 0;
-    if (mergeCount > 0) {
-      btnRow.appendChild(createSmallButton('⊟ Unmerge', 'Click a merged cell to unmerge', () => {
+    if (mode === 'selecting') {
+      const info = document.createElement('div');
+      Object.assign(info.style, { fontSize: '11px', color: '#ff9800', marginBottom: '4px' });
+      info.textContent = 'Click cells on canvas to select, then confirm.';
+      mergeSection.appendChild(info);
+
+      const btnRow = createRow();
+      btnRow.appendChild(mkBtn('\u2713 Confirm', 'Merge selected cells', () => {
         const { table, commit } = getTC();
-        table.setMergeMode('unmerging');
+        const snapshot = table.getRenderSnapshot();
+        const rect = buildMergeRect(table, snapshot);
+        if (!rect) {
+          showToast('Select a rectangular block of ≥2 cells in the same region');
+          return;
+        }
+        table.mergeCells(rect);
+        table.setMergeMode('none');
         commit();
       }));
-    }
-    mergeSection.appendChild(btnRow);
+      btnRow.appendChild(mkBtn('\u2715 Cancel', 'Cancel merge selection', () => {
+        const { table, commit } = getTC();
+        table.setMergeMode('none');
+        renderMergeSection();
+        commit();
+      }));
+      mergeSection.appendChild(btnRow);
+    } else if (mode === 'unmerging') {
+      const info = document.createElement('div');
+      Object.assign(info.style, { fontSize: '11px', color: '#f44336', marginBottom: '4px' });
+      info.textContent = 'Click a merged cell on canvas to unmerge it.';
+      mergeSection.appendChild(info);
 
-    // Show existing merges list
-    if (mergeCount > 0) {
-      const listTitle = document.createElement('div');
-      Object.assign(listTitle.style, { fontSize: '11px', fontWeight: '500', marginTop: '6px', marginBottom: '2px' });
-      listTitle.textContent = `Merged Regions (${mergeCount})`;
-      mergeSection.appendChild(listTitle);
-
-      for (const merge of parsed.merges ?? []) {
-        const mRow = createRow();
-        const mLabel = document.createElement('span');
-        mLabel.style.fontSize = '11px';
-        mLabel.textContent = `${merge.primaryRegion} [${merge.startRow},${merge.startCol}]→[${merge.endRow},${merge.endCol}]`;
-        mRow.appendChild(mLabel);
-        mRow.appendChild(createSmallButton('×', 'Unmerge', () => {
+      const btnRow = createRow();
+      btnRow.appendChild(mkBtn('\u2715 Cancel', 'Cancel unmerge', () => {
+        const { table, commit } = getTC();
+        table.setMergeMode('none');
+        renderMergeSection();
+        commit();
+      }));
+      mergeSection.appendChild(btnRow);
+    } else {
+      const btnRow = createRow();
+      btnRow.appendChild(mkBtn('\u229e Merge', 'Select cells on canvas to merge', () => {
+        const { table, commit } = getTC();
+        table.setMergeMode('selecting');
+        renderMergeSection();
+        commit();
+      }));
+      const mergeCount = parsed.merges?.length ?? 0;
+      if (mergeCount > 0) {
+        btnRow.appendChild(mkBtn('\u229f Unmerge', 'Click a merged cell to unmerge', () => {
           const { table, commit } = getTC();
-          table.unmergeCells(merge.cellId);
+          table.setMergeMode('unmerging');
+          renderMergeSection();
           commit();
         }));
-        mergeSection.appendChild(mRow);
+      }
+      mergeSection.appendChild(btnRow);
+
+      if (mergeCount > 0) {
+        const listTitle = document.createElement('div');
+        Object.assign(listTitle.style, { fontSize: '11px', fontWeight: '500', marginTop: '6px', marginBottom: '2px' });
+        listTitle.textContent = `Merged Regions (${mergeCount})`;
+        mergeSection.appendChild(listTitle);
+
+        for (const merge of parsed.merges ?? []) {
+          const mRow = createRow();
+          const mLabel = document.createElement('span');
+          mLabel.style.fontSize = '11px';
+          mLabel.textContent = `${merge.primaryRegion} [${merge.startRow},${merge.startCol}]→[${merge.endRow},${merge.endCol}]`;
+          mRow.appendChild(mLabel);
+          mRow.appendChild(createSmallButton('×', 'Unmerge', () => {
+            const { table, commit } = getTC();
+            table.unmergeCells(merge.cellId);
+            commit();
+          }));
+          mergeSection.appendChild(mRow);
+        }
       }
     }
   }
 
-  rootElement.appendChild(mergeSection);
+  renderMergeSection();
 }
 
 // ---------------------------------------------------------------------------

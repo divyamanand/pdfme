@@ -734,12 +734,13 @@ export class Table implements ITable {
 
             for (let colIdx = 0; colIdx < columnWidths.length; colIdx++) {
                 const cell = this.getCellByAddress(rowIdx, colIdx)
-                if (cell) {
-                    const renderableCell = buildRenderableCell(cell)
-                    cellsById.set(cell.cellID, renderableCell)
-                    if (rowCellsByRegion[cell.inRegion]) {
-                        rowCellsByRegion[cell.inRegion].push(renderableCell)
-                    }
+                if (!cell) continue
+                // Skip covered cells (consumed by a merge, rowSpan=0/colSpan=0)
+                if (cell.layout && cell.layout.rowSpan === 0 && cell.layout.colSpan === 0) continue
+                const renderableCell = buildRenderableCell(cell)
+                cellsById.set(cell.cellID, renderableCell)
+                if (rowCellsByRegion[cell.inRegion]) {
+                    rowCellsByRegion[cell.inRegion].push(renderableCell)
                 }
             }
 
@@ -840,6 +841,12 @@ export class Table implements ITable {
             endCol: rect.endCol,
             primaryRegion: rect.primaryRegion || 'body',
         }))
+
+        // Populate mergeRect on root cells so renderers can identify merged cells
+        for (const [cellId, rect] of mergeSet) {
+            const rc = cellsById.get(cellId)
+            if (rc) rc.mergeRect = rect
+        }
 
         const getHeadHeight = (): number =>
             (regions.theader.reduce((s, r) => s + r.height, 0)) +
