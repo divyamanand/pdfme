@@ -2,13 +2,14 @@ import { ICellRegistry, ILayoutEngine, IMergeRegistry, IStructureStore, ITable }
 import { ICell } from "../interfaces/core"
 import { IRuleEngine } from "../interfaces/rules/rule-engine.interface"
 import { EvaluationResult } from "../rules/types/evaluation.types"
-import { CellPayload, Region, TableSettings, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap } from "../types"
+import { CellPayload, CellStyle, Region, TableSettings, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap } from "../types"
 import { Rect } from "../types/common"
 import type { SerializedHeaderNode, SerializedBodyCell, TableExportData } from "../renderers/types/serialization.types"
 import { StructureStore } from "../stores/structure.store"
 import { CellRegistry } from "../stores/cell-registry.store"
 import { MergeRegistry } from "../stores/merge-registry.stores"
 import { LayoutEngine } from "../engines/layout.engine"
+import { OverflowEngine } from "../engines/overflow.engine"
 import { RuleRegistry } from "../rules/rule-registry"
 import { RuleEngine } from "../rules/rule-engine"
 import { defaultTableStyle } from "../styles/defaults"
@@ -27,10 +28,12 @@ export class Table implements ITable {
     private cellRegistry: ICellRegistry
     private layoutEngine: ILayoutEngine
     private mergeRegistry: IMergeRegistry
+    private overflowEngine: OverflowEngine
     private settings: TableSettings
     private ruleEngine: IRuleEngine
     private _tableStyle: TableStyle
     private _regionStyles: RegionStyleMap
+    private _overflowStylePatches: Map<string, Partial<CellStyle>> = new Map()
 
     constructor(
         structureStore: IStructureStore,
@@ -46,6 +49,7 @@ export class Table implements ITable {
         this.cellRegistry = cellRegistry
         this.layoutEngine = layoutEngine
         this.mergeRegistry = mergeRegistry
+        this.overflowEngine = new OverflowEngine(cellRegistry, structureStore, layoutEngine)
         this.ruleEngine = ruleEngine
         this.settings = { ...DEFAULT_TABLE_SETTINGS, ...settings }
         this._tableStyle = { ...defaultTableStyle, ...tableStyle }
@@ -64,16 +68,32 @@ export class Table implements ITable {
         return this.ruleEngine?.getResult(cellId)
     }
 
+    getOverflowStylePatch(cellId: string): Partial<CellStyle> | undefined {
+        return this._overflowStylePatches.get(cellId)
+    }
+
     private rebuildAndEvaluate(): void {
         this.layoutEngine.rebuild()
+        this.applyOverflowConstraints()
         this.ruleEngine?.evaluateAll()
         this.applyRuleResults()
     }
 
     private rebuildGeometryAndEvaluate(): void {
         this.layoutEngine.rebuildGeometry()
+        this.applyOverflowConstraints()
         this.ruleEngine?.evaluateAll()
         this.applyRuleResults()
+    }
+
+    private applyOverflowConstraints(): void {
+        const mode = this.settings.overflow ?? 'wrap'
+        this._overflowStylePatches.clear()
+        if (mode === 'wrap') {
+            this.overflowEngine.applyWrap(this._regionStyles, this._overflowStylePatches)
+        } else {
+            this.overflowEngine.apply(mode, this._regionStyles)
+        }
     }
 
     private applyRuleResults(): void {
@@ -117,6 +137,7 @@ export class Table implements ITable {
     }
 
     updateSettings(patch: Partial<TableSettings>): void {
+        const overflowChanged = patch.overflow !== undefined && patch.overflow !== this.settings.overflow
         this.settings = { ...this.settings, ...patch }
         if (patch.defaultCellWidth !== undefined) {
             this.layoutEngine.setDefaultCellWidth(patch.defaultCellWidth)
@@ -124,7 +145,23 @@ export class Table implements ITable {
         if (patch.defaultCellHeight !== undefined) {
             this.layoutEngine.setDefaultCellHeight(patch.defaultCellHeight)
         }
+        if (overflowChanged) {
+            this.resetDimensionsToDefaults()
+        }
         this.rebuildAndEvaluate()
+    }
+
+    private resetDimensionsToDefaults(): void {
+        const defaultW = this.layoutEngine.getDefaultCellWidth()
+        const defaultH = this.layoutEngine.getDefaultCellHeight()
+        const colWidths = this.layoutEngine.getColumnWidths()
+        const rowHeights = this.layoutEngine.getRowHeights()
+        for (let i = 0; i < colWidths.length; i++) {
+            this.layoutEngine.setColumnWidth(i, defaultW)
+        }
+        for (let i = 0; i < rowHeights.length; i++) {
+            this.layoutEngine.setRowHeight(i, defaultH)
+        }
     }
 
     // --- Styles ---
@@ -291,6 +328,7 @@ export class Table implements ITable {
 
     updateCell(cellId: string, payload: CellPayload): void {
         this.cellRegistry.updateCell(cellId, payload)
+        this.applyOverflowConstraints()
         if (this.ruleEngine) {
             const cell = this.cellRegistry.getCellById(cellId)
             if (cell) this.ruleEngine.evaluateCell(cell)
@@ -499,9 +537,11 @@ export class Table implements ITable {
             mergeRegistry.createMerge(merge)
         }
 
-        // Rebuild layout + evaluate rules
+        // Rebuild layout + overflow + evaluate rules
         layoutEngine.rebuild()
+        ;(table as any).applyOverflowConstraints()
         ruleEngine.evaluateAll()
+        ;(table as any).applyRuleResults()
 
         return table
     }

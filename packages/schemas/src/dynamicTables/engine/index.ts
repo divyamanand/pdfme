@@ -14,6 +14,7 @@ export { MergeRegistry } from './stores/merge-registry.stores';
 
 // Engines
 export { LayoutEngine } from './engines/layout.engine';
+export { OverflowEngine } from './engines/overflow.engine';
 
 // Rules
 export { RuleEngine } from './rules/rule-engine';

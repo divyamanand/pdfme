@@ -1,5 +1,5 @@
 import { ICell } from "../core"
-import { CellPayload, Region, TableSettings, TablePosition, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap } from "../../types"
+import { CellPayload, CellStyle, Region, TableSettings, TablePosition, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap } from "../../types"
 import { Rect } from "../../types/common"
 import type { IRuleEngine } from "../rules/rule-engine.interface"
 import type { EvaluationResult } from "../../rules/types/evaluation.types"
@@ -52,6 +52,9 @@ export interface ITable {
     getCompleteGrid(): string[][]
 
     getEvaluationResult(cellId: string): EvaluationResult | undefined
+
+    // Overflow style patches (engine-computed, not user-set)
+    getOverflowStylePatch(cellId: string): Partial<CellStyle> | undefined
 
     // Serialization
     exportState(): TableExportData

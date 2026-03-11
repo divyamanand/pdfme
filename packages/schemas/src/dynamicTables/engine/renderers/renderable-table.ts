@@ -216,10 +216,10 @@ export class RenderableTable {
       evaluationResults.set(cell.cellID, evalResult)
     }
 
-    // Resolve style through cascade: defaultCellStyle → regionStyle → cell overrides
-    // Rule patches are NOT applied here — they go through RuleEngine.resolveCell() at render time
+    // Resolve style through cascade: defaultCellStyle → regionStyle → cell overrides → overflow patch
     const regionStyle = regionStyles[cell.inRegion]
-    const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides)
+    const overflowPatch = table.getOverflowStylePatch(cell.cellID)
+    const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides, overflowPatch)
 
     return {
       cellID: cell.cellID,

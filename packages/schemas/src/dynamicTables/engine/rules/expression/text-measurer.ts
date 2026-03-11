@@ -95,10 +95,10 @@ export class TextMeasurer {
     let fontSize = style.fontSize || 12;
     const step = 0.5; // decrease by 0.5pt each iteration
 
-    // Try decreasing font size until it fits
+    // Try decreasing font size until wrapped text fits within cell height
     while (fontSize >= minFontSize) {
-      const metrics = this.measureText(text, { fontSize });
-      if (metrics.width <= cellWidth && metrics.height <= cellHeight) {
+      const requiredHeight = this.measureRequiredHeight(text, cellWidth, { fontSize });
+      if (requiredHeight <= cellHeight) {
         return fontSize;
       }
       fontSize -= step;
@@ -116,6 +116,70 @@ export class TextMeasurer {
    * @param fontSize - font size in pt
    * @returns wrapped text and its height
    */
+  /**
+   * Measure the required height for text wrapped within a given width.
+   * Accounts for lineHeight and characterSpacing from the cell style.
+   *
+   * @param text - text to measure
+   * @param availableWidth - available width in mm (after padding)
+   * @param style - fontSize (pt), lineHeight (multiplier), characterSpacing (pt)
+   * @returns required height in mm
+   */
+  public static measureRequiredHeight(
+    text: string,
+    availableWidth: number,
+    style: { fontSize: number; lineHeight?: number; characterSpacing?: number },
+  ): number {
+    if (!text) return 0;
+
+    const fontSize = style.fontSize || 12;
+    const charHeightMm = fontSize * 0.353;
+    const charWidthMm = charHeightMm * 0.6 + (style.characterSpacing ?? 0) * 0.353;
+    const lineHeightMm = charHeightMm * (style.lineHeight ?? 1);
+
+    const charsPerLine = Math.max(1, Math.floor(availableWidth / charWidthMm));
+
+    const explicitLines = text.split('\n');
+    let totalVisualLines = 0;
+
+    for (const line of explicitLines) {
+      if (line.length === 0) {
+        totalVisualLines += 1; // empty line still takes one visual line
+      } else {
+        totalVisualLines += Math.ceil(line.length / charsPerLine);
+      }
+    }
+
+    return totalVisualLines * lineHeightMm;
+  }
+
+  /**
+   * Measure the required width for text as a single line (no wrapping).
+   * Finds the widest line among newline-split lines.
+   *
+   * @param text - text to measure
+   * @param style - fontSize (pt), characterSpacing (pt)
+   * @returns required width in mm
+   */
+  public static measureRequiredWidth(
+    text: string,
+    style: { fontSize: number; characterSpacing?: number },
+  ): number {
+    if (!text) return 0;
+
+    const fontSize = style.fontSize || 12;
+    const charHeightMm = fontSize * 0.353;
+    const charWidthMm = charHeightMm * 0.6 + (style.characterSpacing ?? 0) * 0.353;
+
+    const lines = text.split('\n');
+    let maxLen = 0;
+    for (const line of lines) {
+      if (line.length > maxLen) maxLen = line.length;
+    }
+
+    return maxLen * charWidthMm;
+  }
+
   public static wrapText(text: string, width: number, fontSize: number): { text: string; height: number } {
     const charHeight = fontSize * 0.353;
     const charWidth = charHeight * 0.6;
