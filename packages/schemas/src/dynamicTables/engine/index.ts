@@ -50,6 +50,7 @@ export type {
   TableSettings,
   HeaderVisibility,
   OverflowMode,
+  FooterPlacement,
   Spacing,
   Rect,
   CellPayload,

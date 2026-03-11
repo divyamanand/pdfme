@@ -17,7 +17,9 @@ const DEFAULT_TABLE_SETTINGS: TableSettings = {
     overflow: 'wrap',
     footer: { mode: 'last-page' },
     headerVisibility: { theader: true, lheader: true, rheader: true },
-    pagination: { repeatHeaders: true },
+    showGridLines: true,
+    defaultCellWidth: 30,
+    defaultCellHeight: 10,
 }
 
 export class Table implements ITable {
@@ -48,6 +50,14 @@ export class Table implements ITable {
         this.settings = { ...DEFAULT_TABLE_SETTINGS, ...settings }
         this._tableStyle = { ...defaultTableStyle, ...tableStyle }
         this._regionStyles = regionStyles ? { ...regionStyles } : {}
+
+        // Sync default cell dimensions from settings to layout engine
+        if (this.settings.defaultCellWidth !== undefined) {
+            this.layoutEngine.setDefaultCellWidth(this.settings.defaultCellWidth)
+        }
+        if (this.settings.defaultCellHeight !== undefined) {
+            this.layoutEngine.setDefaultCellHeight(this.settings.defaultCellHeight)
+        }
     }
 
     getEvaluationResult(cellId: string): EvaluationResult | undefined {
@@ -108,6 +118,12 @@ export class Table implements ITable {
 
     updateSettings(patch: Partial<TableSettings>): void {
         this.settings = { ...this.settings, ...patch }
+        if (patch.defaultCellWidth !== undefined) {
+            this.layoutEngine.setDefaultCellWidth(patch.defaultCellWidth)
+        }
+        if (patch.defaultCellHeight !== undefined) {
+            this.layoutEngine.setDefaultCellHeight(patch.defaultCellHeight)
+        }
         this.rebuildAndEvaluate()
     }
 
@@ -383,8 +399,6 @@ export class Table implements ITable {
             regionStyles: { ...this._regionStyles },
             columnWidths: [...this.layoutEngine.getColumnWidths()],
             rowHeights: [...this.layoutEngine.getRowHeights()],
-            defaultCellWidth: this.layoutEngine.getDefaultCellWidth(),
-            defaultCellHeight: this.layoutEngine.getDefaultCellHeight(),
             rules,
         }
     }
@@ -441,9 +455,9 @@ export class Table implements ITable {
             structureStore.insertBodyRow(rowIdx, cellIds)
         }
 
-        // Restore geometry
-        layoutEngine.setDefaultCellWidth(data.defaultCellWidth)
-        layoutEngine.setDefaultCellHeight(data.defaultCellHeight)
+        // Restore geometry (default dimensions now live in settings)
+        layoutEngine.setDefaultCellWidth(data.settings.defaultCellWidth ?? 30)
+        layoutEngine.setDefaultCellHeight(data.settings.defaultCellHeight ?? 10)
         for (let i = 0; i < data.columnWidths.length; i++) {
             if (i < layoutEngine.getColumnWidths().length) {
                 layoutEngine.setColumnWidth(i, data.columnWidths[i])

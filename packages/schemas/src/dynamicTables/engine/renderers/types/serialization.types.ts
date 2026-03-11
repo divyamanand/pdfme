@@ -40,7 +40,5 @@ export interface TableExportData {
   regionStyles: RegionStyleMap
   columnWidths: number[]
   rowHeights: number[]
-  defaultCellWidth: number
-  defaultCellHeight: number
   rules: RulePayload[]
 }

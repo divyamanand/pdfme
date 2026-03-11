@@ -9,7 +9,6 @@ export const SCHEMA_TYPE = 'dynamicTable' as const;
  */
 export interface DynamicTableSchema extends Schema {
   type: typeof SCHEMA_TYPE;
-  showGridLines?: boolean;
 }
 
 /**

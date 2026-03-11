@@ -138,12 +138,7 @@ export type OverflowMode = 'wrap' | 'increase-height' | 'increase-width'
 export type FooterPlacement =
     | { mode: 'every-page' }
     | { mode: 'last-page' }
-    | { mode: 'custom'; pages: number[] }
-
-export interface PaginationSettings {
-    pageSize?: number
-    repeatHeaders?: boolean
-}
+    | { mode: 'first-page' }
 
 export interface HeaderVisibility {
     theader?: boolean
@@ -159,5 +154,7 @@ export interface TableSettings {
     overflow?: OverflowMode
     footer?: FooterPlacement
     headerVisibility?: HeaderVisibility
-    pagination?: PaginationSettings
+    showGridLines?: boolean
+    defaultCellWidth?: number
+    defaultCellHeight?: number
 }

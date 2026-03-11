@@ -126,13 +126,6 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
         },
       },
       '---3': { type: 'void', widget: 'Divider' },
-
-      // Grid Lines
-      showGridLines: {
-        type: 'boolean',
-        widget: 'switch',
-        props: { label: 'Show Grid Lines' },
-      },
     };
   },
 
@@ -152,7 +145,6 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
     position: { x: 0, y: 0 },
     width: 150,
     height: 80,
-    showGridLines: true,
     readOnly: false,
   },
 };
