@@ -26,6 +26,7 @@ import {
   tableStyleWidget,
   regionStyleWidget,
   bodyStyleWidget,
+  structureWidget,
 } from './helpers/propPanelWidgets.js';
 
 /**
@@ -77,6 +78,18 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
     const showTheader = parsed.settings?.headerVisibility?.theader !== false;
 
     return {
+      // Table Structure — tree view with all region/row/col/merge controls
+      structureSection: {
+        title: 'Table Structure',
+        type: 'object',
+        widget: 'Card',
+        span: 24,
+        properties: {
+          structure: { widget: 'structureWidget', span: 24 },
+        },
+      },
+      '---0': { type: 'void', widget: 'Divider' },
+
       // Table Settings
       settingsSection: {
         title: 'Table Settings',
@@ -84,7 +97,6 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
         widget: 'Card',
         span: 24,
         properties: {
-          headerVisibility: { widget: 'headerVisibilityWidget', span: 24 },
           constraints: { widget: 'constraintsWidget', span: 24 },
           overflow: { widget: 'overflowWidget', span: 24 },
         },
@@ -130,6 +142,7 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
   },
 
   widgets: {
+    structureWidget,
     headerVisibilityWidget,
     constraintsWidget,
     overflowWidget,

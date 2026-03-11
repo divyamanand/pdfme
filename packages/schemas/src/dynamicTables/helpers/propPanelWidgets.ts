@@ -11,7 +11,7 @@
 import type { PropPanelWidgetProps, SchemaForUI } from '@pdfme/common';
 import { getFallbackFontName, DEFAULT_FONT_NAME } from '@pdfme/common';
 import type { DynamicTableSchema } from '../types.js';
-import type { TableExportData } from '../engine/index.js';
+import type { TableExportData, SerializedHeaderNode, Region } from '../engine/index.js';
 import { getTable, commitTable } from '../instanceManager.js';
 import { showToast } from './toast.js';
 
@@ -460,5 +460,307 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
     altRow.appendChild(altLabel);
     altRow.appendChild(createColorInput(style.alternateBackgroundColor ?? '#f5f5f5', (v) => update({ alternateBackgroundColor: v })));
     rootElement.appendChild(altRow);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Small icon-button helper
+// ---------------------------------------------------------------------------
+
+function createSmallButton(text: string, title: string, onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = text;
+  btn.title = title;
+  Object.assign(btn.style, {
+    width: '20px',
+    height: '20px',
+    padding: '0',
+    border: '1px solid #ccc',
+    borderRadius: '3px',
+    background: '#fafafa',
+    cursor: 'pointer',
+    fontSize: '13px',
+    lineHeight: '18px',
+    textAlign: 'center',
+    flexShrink: '0',
+  });
+  btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return btn;
+}
+
+// ---------------------------------------------------------------------------
+// Structure widget — tree view of all regions
+// ---------------------------------------------------------------------------
+
+/**
+ * Shows a tree structure for the table:
+ * - Top Header (theader) with sub-headers
+ * - Left Header / Right Header (toggle + add/remove)
+ * - Body row/col count with +/-
+ * - Footer (toggle)
+ * - Merge / Unmerge controls
+ */
+export function structureWidget(props: PropPanelWidgetProps): void {
+  const { rootElement } = props;
+  rootElement.style.width = '100%';
+
+  const schema = props.activeSchema as WidgetSchema;
+  const parsed = parseContent(schema);
+  const vis = parsed.settings?.headerVisibility ?? { theader: true, lheader: false, rheader: false };
+  const hasFooter = !!parsed.settings?.footer;
+  const bodyRows = parsed.body?.length ?? 0;
+  const bodyCols = parsed.body?.[0]?.length ?? 0;
+
+  const getTC = () => getTableAndCommit(props);
+
+  // --- Top Header (theader) ---
+  const theaderNodes = parsed.headerTrees?.theader ?? [];
+  renderRegionSection(rootElement, 'Top Header', vis.theader !== false, (val) => {
+    const { table, commit } = getTC();
+    if (val && theaderNodes.length === 0) table.addHeaderCell('theader' as Region);
+    table.updateSettings({ headerVisibility: { ...vis, theader: val } });
+    commit();
+  }, () => {
+    const container = document.createElement('div');
+    container.style.paddingLeft = '12px';
+    renderHeaderTree(container, theaderNodes, 'theader' as Region, getTC);
+    // Add column button
+    const addBtn = createSmallButton('+', 'Add column', () => {
+      const { table, commit } = getTC();
+      table.addHeaderCell('theader' as Region);
+      commit();
+    });
+    addBtn.style.marginTop = '4px';
+    container.appendChild(addBtn);
+    return container;
+  });
+
+  // --- Left Header ---
+  const lheaderNodes = parsed.headerTrees?.lheader ?? [];
+  renderRegionSection(rootElement, 'Left Header', vis.lheader === true, (val) => {
+    const { table, commit } = getTC();
+    if (val && lheaderNodes.length === 0) table.addHeaderCell('lheader' as Region);
+    table.updateSettings({ headerVisibility: { ...vis, lheader: val } });
+    commit();
+  }, () => {
+    const container = document.createElement('div');
+    container.style.paddingLeft = '12px';
+    renderHeaderTree(container, lheaderNodes, 'lheader' as Region, getTC);
+    const addBtn = createSmallButton('+', 'Add row', () => {
+      const { table, commit } = getTC();
+      table.addHeaderCell('lheader' as Region);
+      commit();
+    });
+    addBtn.style.marginTop = '4px';
+    container.appendChild(addBtn);
+    return container;
+  });
+
+  // --- Right Header ---
+  const rheaderNodes = parsed.headerTrees?.rheader ?? [];
+  renderRegionSection(rootElement, 'Right Header', vis.rheader === true, (val) => {
+    const { table, commit } = getTC();
+    if (val && rheaderNodes.length === 0) table.addHeaderCell('rheader' as Region);
+    table.updateSettings({ headerVisibility: { ...vis, rheader: val } });
+    commit();
+  }, () => {
+    const container = document.createElement('div');
+    container.style.paddingLeft = '12px';
+    renderHeaderTree(container, rheaderNodes, 'rheader' as Region, getTC);
+    const addBtn = createSmallButton('+', 'Add row', () => {
+      const { table, commit } = getTC();
+      table.addHeaderCell('rheader' as Region);
+      commit();
+    });
+    addBtn.style.marginTop = '4px';
+    container.appendChild(addBtn);
+    return container;
+  });
+
+  // --- Body ---
+  const bodySection = document.createElement('div');
+  Object.assign(bodySection.style, { marginTop: '8px', padding: '6px', background: '#f9f9f9', borderRadius: '4px' });
+
+  const bodyTitle = document.createElement('div');
+  Object.assign(bodyTitle.style, { fontSize: '12px', fontWeight: '600', marginBottom: '4px' });
+  bodyTitle.textContent = 'Body';
+  bodySection.appendChild(bodyTitle);
+
+  // Row controls
+  const rowRow = createRow();
+  const rowLabel = document.createElement('span');
+  rowLabel.textContent = `Rows: ${bodyRows}`;
+  rowLabel.style.fontSize = '12px';
+  rowLabel.style.minWidth = '60px';
+  rowRow.appendChild(rowLabel);
+  rowRow.appendChild(createSmallButton('+', 'Add row', () => {
+    const { table, commit } = getTC();
+    const status = table.insertBodyRow(table.getRowHeights().length);
+    if (status === 'max-reached') showToast('Maximum rows reached');
+    commit();
+  }));
+  rowRow.appendChild(createSmallButton('−', 'Remove last row', () => {
+    const { table, commit } = getTC();
+    if (bodyRows <= 1) { showToast('Cannot remove the last row'); return; }
+    const status = table.removeBodyRow(bodyRows - 1);
+    if (status === 'cleared') showToast('Minimum rows — row cleared');
+    commit();
+  }));
+  bodySection.appendChild(rowRow);
+
+  // Column controls
+  const colRow = createRow();
+  const colLabel = document.createElement('span');
+  colLabel.textContent = `Cols: ${bodyCols}`;
+  colLabel.style.fontSize = '12px';
+  colLabel.style.minWidth = '60px';
+  colRow.appendChild(colLabel);
+  colRow.appendChild(createSmallButton('+', 'Add column', () => {
+    const { table, commit } = getTC();
+    table.addHeaderCell('theader' as Region);
+    commit();
+  }));
+  colRow.appendChild(createSmallButton('−', 'Remove last column', () => {
+    const { table, commit } = getTC();
+    if (bodyCols <= 1) { showToast('Cannot remove the last column'); return; }
+    const status = table.removeBodyCol(bodyCols - 1);
+    if (status === 'cleared') showToast('Minimum cols — column cleared');
+    commit();
+  }));
+  bodySection.appendChild(colRow);
+
+  rootElement.appendChild(bodySection);
+
+  // --- Footer ---
+  const footerNodes = parsed.headerTrees?.footer ?? [];
+  renderRegionSection(rootElement, 'Footer', hasFooter, (val) => {
+    const { table, commit } = getTC();
+    if (val) {
+      if (footerNodes.length === 0) table.addHeaderCell('footer' as Region);
+      table.updateSettings({ footer: { mode: 'every-page' } });
+    } else {
+      table.updateSettings({ footer: undefined });
+    }
+    commit();
+  });
+
+  // --- Merge / Unmerge ---
+  const mergeCount = parsed.merges?.length ?? 0;
+  if (mergeCount > 0) {
+    const mergeSection = document.createElement('div');
+    Object.assign(mergeSection.style, { marginTop: '8px', padding: '6px', background: '#f9f9f9', borderRadius: '4px' });
+    const mergeTitle = document.createElement('div');
+    Object.assign(mergeTitle.style, { fontSize: '12px', fontWeight: '600', marginBottom: '4px' });
+    mergeTitle.textContent = `Merged Regions (${mergeCount})`;
+    mergeSection.appendChild(mergeTitle);
+
+    for (const merge of parsed.merges ?? []) {
+      const mRow = createRow();
+      const mLabel = document.createElement('span');
+      mLabel.style.fontSize = '11px';
+      mLabel.textContent = `${merge.primaryRegion} [${merge.startRow},${merge.startCol}]→[${merge.endRow},${merge.endCol}]`;
+      mRow.appendChild(mLabel);
+      mRow.appendChild(createSmallButton('×', 'Unmerge', () => {
+        const { table, commit } = getTC();
+        table.unmergeCells(merge.cellId);
+        commit();
+      }));
+      mergeSection.appendChild(mRow);
+    }
+    rootElement.appendChild(mergeSection);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers for structureWidget
+// ---------------------------------------------------------------------------
+
+function renderRegionSection(
+  parent: HTMLElement,
+  label: string,
+  enabled: boolean,
+  onToggle: (val: boolean) => void,
+  renderContent?: () => HTMLElement,
+): void {
+  const section = document.createElement('div');
+  Object.assign(section.style, { marginTop: '6px', padding: '6px', background: '#f9f9f9', borderRadius: '4px' });
+
+  const header = createRow();
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = enabled;
+  checkbox.addEventListener('change', () => onToggle(checkbox.checked));
+  header.appendChild(checkbox);
+
+  const title = document.createElement('span');
+  title.textContent = label;
+  Object.assign(title.style, { fontSize: '12px', fontWeight: '600' });
+  header.appendChild(title);
+  section.appendChild(header);
+
+  if (enabled && renderContent) {
+    section.appendChild(renderContent());
+  }
+
+  parent.appendChild(section);
+}
+
+function renderHeaderTree(
+  container: HTMLElement,
+  nodes: SerializedHeaderNode[],
+  region: Region,
+  getTC: () => ReturnType<typeof getTableAndCommit>,
+  parentId?: string,
+  depth: number = 0,
+): void {
+  for (const node of nodes) {
+    const nodeRow = document.createElement('div');
+    Object.assign(nodeRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '2px 0',
+      paddingLeft: `${depth * 14}px`,
+    });
+
+    // Expand indicator for nodes with children
+    const indicator = document.createElement('span');
+    indicator.style.fontSize = '10px';
+    indicator.style.width = '10px';
+    indicator.textContent = node.children.length > 0 ? '▼' : '•';
+    nodeRow.appendChild(indicator);
+
+    // Label
+    const label = document.createElement('span');
+    label.style.fontSize = '12px';
+    label.style.flex = '1';
+    label.style.overflow = 'hidden';
+    label.style.textOverflow = 'ellipsis';
+    label.style.whiteSpace = 'nowrap';
+    label.textContent = String(node.rawValue || node.cellId.slice(0, 6));
+    nodeRow.appendChild(label);
+
+    // Sub-header button (theader only)
+    if (region === 'theader') {
+      nodeRow.appendChild(createSmallButton('+', 'Add sub-header', () => {
+        const { table, commit } = getTC();
+        table.addHeaderCell('theader' as Region, node.cellId);
+        commit();
+      }));
+    }
+
+    // Remove button
+    nodeRow.appendChild(createSmallButton('×', 'Remove', () => {
+      const { table, commit } = getTC();
+      table.removeHeaderCell(node.cellId, region, !parentId, parentId);
+      commit();
+    }));
+
+    container.appendChild(nodeRow);
+
+    // Recurse children
+    if (node.children.length > 0) {
+      renderHeaderTree(container, node.children, region, getTC, node.cellId, depth + 1);
+    }
   }
 }

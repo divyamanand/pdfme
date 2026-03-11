@@ -6,7 +6,7 @@
  *
  * Modes:
  * - viewer: Read-only display
- * - designer: Full structure editing (add/remove row/col, resize, merge, context menu)
+ * - designer: Cell editing, selection, resize handles (structure controls in propPanel)
  * - form: Body cells are editable; add/remove row buttons
  */
 
@@ -19,12 +19,9 @@ import { toPdfmeCellSchema, getCellDisplayValue } from './helpers/cellSchemaMapp
 import {
   appendAddRowButton,
   appendRemoveRowButtons,
-  appendAddColumnButton,
-  appendRemoveColumnButtons,
   appendColumnResizeHandles,
   appendRowResizeHandles,
   handleCellClick,
-  attachContextMenu,
 } from './uiComponents/index.js';
 
 const cellUiRender = cell.ui;
@@ -155,15 +152,10 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     appendRemoveRowButtons(rootElement, snapshot, table, doCommit);
   }
 
-  // Designer mode controls
+  // Designer mode controls — only resize handles (structure controls are in propPanel)
   if (mode === 'designer' && doCommit) {
-    appendAddRowButton(rootElement, snapshot, table, doCommit);
-    appendRemoveRowButtons(rootElement, snapshot, table, doCommit);
-    appendAddColumnButton(rootElement, snapshot, table, doCommit);
-    appendRemoveColumnButtons(rootElement, snapshot, table, doCommit);
     appendColumnResizeHandles(rootElement, snapshot, table, doCommit, scale);
     appendRowResizeHandles(rootElement, snapshot, table, doCommit, scale);
-    attachContextMenu(rootElement, snapshot, table, doCommit, uiRender, arg);
   }
 
   // Viewer mode: reset editing state
