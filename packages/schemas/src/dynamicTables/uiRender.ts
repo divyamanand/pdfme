@@ -44,8 +44,20 @@ function commit(table: Table, schemaName: string, onChange: (arg: { key: string;
  * 3. Attach interactive controls that call Table directly
  */
 export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<void> {
-  const { schema, value, rootElement, mode, onChange, scale } = arg;
+  const { schema, value, rootElement, mode, onChange, scale, basePdf } = arg;
   const table = getTable(schema.name, value);
+
+  // Compute available space from page boundaries
+  const pageInfo = typeof basePdf === 'object' && basePdf !== null && 'width' in basePdf
+    ? basePdf as { width: number; height: number; padding: [number, number, number, number] }
+    : null;
+  if (pageInfo) {
+    const [pTop, pRight, pBottom, pLeft] = pageInfo.padding;
+    const availableWidth = pageInfo.width - pRight - schema.position.x;
+    const availableHeight = pageInfo.height - pBottom - schema.position.y;
+    table.setAvailableSpace(availableWidth, availableHeight);
+  }
+
   const snapshot = table.getRenderSnapshot();
 
   // Clear previous render
@@ -163,10 +175,16 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     table.resetUIState();
   }
 
-  // Auto-fit bounding box to match table dimensions
+  // Auto-fit bounding box to match table dimensions (clamped to page boundaries)
   if (onChange) {
-    const tableWidth = snapshot.getWidth();
-    const tableHeight = snapshot.getHeight();
+    let tableWidth = snapshot.getWidth();
+    let tableHeight = snapshot.getHeight();
+
+    // Clamp to available space so table does not overflow page boundaries
+    const { width: availW, height: availH } = table.getAvailableSpace();
+    if (tableWidth > availW) tableWidth = availW;
+    if (tableHeight > availH) tableHeight = availH;
+
     const changes: { key: string; value: unknown }[] = [];
     if (Math.abs(schema.width - tableWidth) > 0.01) {
       changes.push({ key: 'width', value: tableWidth });

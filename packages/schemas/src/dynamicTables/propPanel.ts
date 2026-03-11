@@ -16,7 +16,6 @@ import {
   RuleEngine,
   RuleRegistry,
 } from './engine/index.js';
-import type { TableExportData } from './engine/index.js';
 import type { DynamicTableSchema } from './types.js';
 import { SCHEMA_TYPE } from './types.js';
 import {
@@ -24,8 +23,7 @@ import {
   constraintsWidget,
   overflowWidget,
   tableStyleWidget,
-  regionStyleWidget,
-  bodyStyleWidget,
+  regionStyleSelectWidget,
   structureWidget,
 } from './helpers/propPanelWidgets.js';
 
@@ -71,12 +69,7 @@ export function createDefaultTableValue(): string {
 }
 
 export const propPanel: PropPanel<DynamicTableSchema> = {
-  schema: ({ activeSchema }) => {
-    const parsed: TableExportData = JSON.parse(
-      (activeSchema as any).content || '{}',
-    );
-    const showTheader = parsed.settings?.headerVisibility?.theader !== false;
-
+  schema: () => {
     return {
       // Table Structure — tree view with all region/row/col/merge controls
       structureSection: {
@@ -115,26 +108,14 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
       },
       '---2': { type: 'void', widget: 'Divider' },
 
-      // Header Styles (hidden when theader is not visible)
-      headStyles: {
-        hidden: !showTheader,
-        title: 'Header Styles',
+      // Region Styles — unified section with region selector
+      regionStyles: {
+        title: 'Region Styles',
         type: 'object',
         widget: 'Card',
         span: 24,
         properties: {
-          theaderStyle: { widget: 'regionStyleWidget', span: 24 },
-        },
-      },
-
-      // Body Styles
-      bodyStyles: {
-        title: 'Body Styles',
-        type: 'object',
-        widget: 'Card',
-        span: 24,
-        properties: {
-          bodyStyle: { widget: 'bodyStyleWidget', span: 24 },
+          regionStyle: { widget: 'regionStyleSelectWidget', span: 24 },
         },
       },
       '---3': { type: 'void', widget: 'Divider' },
@@ -147,8 +128,7 @@ export const propPanel: PropPanel<DynamicTableSchema> = {
     constraintsWidget,
     overflowWidget,
     tableStyleWidget,
-    regionStyleWidget,
-    bodyStyleWidget,
+    regionStyleSelectWidget,
   },
 
   defaultSchema: {

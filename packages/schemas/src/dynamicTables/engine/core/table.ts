@@ -43,6 +43,10 @@ export class Table implements ITable {
     private _regionStyles: RegionStyleMap
     private _overflowStylePatches: Map<string, Partial<CellStyle>> = new Map()
 
+    // Available space for the table (set from page boundaries)
+    private _availableWidth: number = Infinity
+    private _availableHeight: number = Infinity
+
     // Transient UI state (not serialized)
     private _uiState: { editingCellId: string | null; selectedCells: Set<string>; selectionAnchor: { row: number; col: number; region: string } | null } = {
         editingCellId: null,
@@ -246,9 +250,58 @@ export class Table implements ITable {
         this._regionStyles = { ...this._regionStyles, [region]: style }
     }
 
+    // --- Available space (page boundary constraints) ---
+
+    setAvailableSpace(width: number, height: number): void {
+        this._availableWidth = width
+        this._availableHeight = height
+    }
+
+    getAvailableSpace(): { width: number; height: number } {
+        return { width: this._availableWidth, height: this._availableHeight }
+    }
+
+    /** Sum of all main-grid column widths */
+    private getMainGridWidth(): number {
+        return this.layoutEngine.getColumnWidths().reduce((s, w) => s + w, 0)
+    }
+
+    /** Sum of all main-grid row heights + footer row heights */
+    private getTotalHeight(): number {
+        const mainH = this.layoutEngine.getRowHeights().reduce((s, h) => s + h, 0)
+        const footerH = this.layoutEngine.getFooterRowHeights().reduce((s, h) => s + h, 0)
+        return mainH + footerH
+    }
+
+    /** Sum of all footer column widths */
+    private getFooterGridWidth(): number {
+        return this.layoutEngine.getFooterColumnWidths().reduce((s, w) => s + w, 0)
+    }
+
+    /** Current total width (max of main grid and footer) */
+    getTotalWidth(): number {
+        return Math.max(this.getMainGridWidth(), this.getFooterGridWidth())
+    }
+
+    /** Check if adding a new column would exceed available width */
+    wouldExceedWidth(extraWidth?: number): boolean {
+        const extra = extraWidth ?? this.layoutEngine.getDefaultCellWidth()
+        return this.getMainGridWidth() + extra > this._availableWidth
+    }
+
+    /** Check if adding a new row would exceed available height */
+    wouldExceedHeight(extraHeight?: number): boolean {
+        const extra = extraHeight ?? this.layoutEngine.getDefaultCellHeight()
+        return this.getTotalHeight() + extra > this._availableHeight
+    }
+
     // --- Header operations ---
 
-    addHeaderCell(region: Region, parentId?: string, index?: number): string {
+    addHeaderCell(region: Region, parentId?: string, index?: number): string | 'exceeds-bounds' {
+        // Boundary check: theader adds a column (width), lheader/rheader adds a row (height)
+        if (region === 'theader' && !parentId && this.wouldExceedWidth()) return 'exceeds-bounds'
+        if ((region === 'lheader' || region === 'rheader') && !parentId && this.wouldExceedHeight()) return 'exceeds-bounds'
+
         const cellId = this.cellRegistry.createCell(region)
 
         if (parentId) {
@@ -316,10 +369,11 @@ export class Table implements ITable {
         }
     }
 
-    insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached' {
+    insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached' | 'exceeds-bounds' {
         const effectiveMax = this.getEffectiveMaxRows()
         if (effectiveMax !== undefined &&
             this.structureStore.getBody().length >= effectiveMax) return 'max-reached'
+        if (this.wouldExceedHeight()) return 'exceeds-bounds'
 
         const numCols = this.structureStore.getBody().length > 0
             ? this.structureStore.getBody()[0].length
@@ -393,10 +447,11 @@ export class Table implements ITable {
         }
     }
 
-    insertBodyCol(colIndex: number, data?: (string | number)[]): 'added' | 'max-reached' {
+    insertBodyCol(colIndex: number, data?: (string | number)[]): 'added' | 'max-reached' | 'exceeds-bounds' {
         const effectiveMax = this.getEffectiveMaxCols()
         if (effectiveMax !== undefined &&
             (this.structureStore.getBody()[0]?.length ?? 0) >= effectiveMax) return 'max-reached'
+        if (this.wouldExceedWidth()) return 'exceeds-bounds'
 
         const numRows = this.structureStore.getBody().length
         const cellIds: string[] = []

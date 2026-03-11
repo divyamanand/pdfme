@@ -19,8 +19,20 @@ const rectanglePdfRender = rectangle.pdf;
 const REGION_ORDER: Region[] = ['theader', 'lheader', 'rheader', 'body', 'footer'];
 
 export async function pdfRender(arg: PDFRenderProps<DynamicTableSchema>): Promise<void> {
-  const { value, schema } = arg;
+  const { value, schema, basePdf } = arg;
   const table = getTable(schema.name, value);
+
+  // Compute available space from page boundaries
+  const pageInfo = typeof basePdf === 'object' && basePdf !== null && 'width' in basePdf
+    ? basePdf as { width: number; height: number; padding: [number, number, number, number] }
+    : null;
+  if (pageInfo) {
+    const [_pTop, pRight, pBottom, _pLeft] = pageInfo.padding;
+    const availableWidth = pageInfo.width - pRight - schema.position.x;
+    const availableHeight = pageInfo.height - pBottom - schema.position.y;
+    table.setAvailableSpace(availableWidth, availableHeight);
+  }
+
   const snapshot = table.getRenderSnapshot();
 
   const offsetX = schema.position.x;

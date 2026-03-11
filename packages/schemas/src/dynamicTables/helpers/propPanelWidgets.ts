@@ -325,26 +325,56 @@ export function tableStyleWidget(props: PropPanelWidgetProps): void {
   rootElement.appendChild(widthRow);
 }
 
-/**
- * Region style widget for theader.
- * Full cell style controls: font, size, colors, alignment, borders, padding.
- */
-export function regionStyleWidget(props: PropPanelWidgetProps): void {
-  renderRegionStyleControls(props, 'theader');
-}
+// Track selected region per schema for the unified region style widget
+const selectedRegionMap = new Map<string, string>();
 
 /**
- * Body style widget: same as region style + alternateBackgroundColor.
+ * Unified region style widget with a region selector dropdown.
+ * Shows cell style controls for the selected region.
  */
-export function bodyStyleWidget(props: PropPanelWidgetProps): void {
-  renderRegionStyleControls(props, 'body');
+export function regionStyleSelectWidget(props: PropPanelWidgetProps): void {
+  const schema = props.activeSchema as WidgetSchema;
+  const schemaId = schema.id;
+  const parsed = parseContent(schema);
+  const vis = parsed.settings?.headerVisibility ?? { theader: true, lheader: false, rheader: false };
+  const hasFooter = !!parsed.settings?.footer;
+
+  // Build list of active regions
+  const regions: { label: string; value: string }[] = [];
+  if (vis.theader !== false) regions.push({ label: 'Top Header', value: 'theader' });
+  if (vis.lheader) regions.push({ label: 'Left Header', value: 'lheader' });
+  if (vis.rheader) regions.push({ label: 'Right Header', value: 'rheader' });
+  regions.push({ label: 'Body', value: 'body' });
+  if (hasFooter) regions.push({ label: 'Footer', value: 'footer' });
+
+  // Default to first available region if stored selection is no longer valid
+  let selectedRegion = selectedRegionMap.get(schemaId) ?? 'body';
+  if (!regions.some(r => r.value === selectedRegion)) selectedRegion = regions[0].value;
+
+  const { rootElement } = props;
+  rootElement.style.width = '100%';
+
+  // Region selector
+  rootElement.appendChild(createLabel('Region'));
+  const regionSelect = createSelect(regions, selectedRegion, (v) => {
+    selectedRegionMap.set(schemaId, v);
+    // Re-render the controls for the newly selected region
+    controlsContainer.innerHTML = '';
+    renderRegionStyleControls(props, v, controlsContainer);
+  });
+  rootElement.appendChild(regionSelect);
+
+  // Container for style controls
+  const controlsContainer = document.createElement('div');
+  rootElement.appendChild(controlsContainer);
+  renderRegionStyleControls(props, selectedRegion, controlsContainer);
 }
 
 // ---------------------------------------------------------------------------
 // Shared region style renderer
 // ---------------------------------------------------------------------------
 
-function renderRegionStyleControls(props: PropPanelWidgetProps, region: string): void {
+function renderRegionStyleControls(props: PropPanelWidgetProps, region: string, container: HTMLElement): void {
   const schema = props.activeSchema as WidgetSchema;
   const parsed = parseContent(schema);
   const regionStyles = parsed.regionStyles ?? {};
@@ -354,9 +384,6 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
   const fontNames = Object.keys(font);
   const fallbackFontName = getFallbackFontName(font);
 
-  const { rootElement } = props;
-  rootElement.style.width = '100%';
-
   const update = (patch: Record<string, unknown>) => {
     const { table, commit } = getTableAndCommit(props);
     const current = table.getRegionStyle(region as any) ?? {};
@@ -365,8 +392,8 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
   };
 
   // Font name
-  rootElement.appendChild(createLabel('Font'));
-  rootElement.appendChild(createSelect(
+  container.appendChild(createLabel('Font'));
+  container.appendChild(createSelect(
     fontNames.map((n) => ({ label: n, value: n })),
     style.fontName ?? fallbackFontName,
     (v) => update({ fontName: v }),
@@ -384,7 +411,7 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
   lhLabel.style.fontSize = '12px';
   sizeRow.appendChild(lhLabel);
   sizeRow.appendChild(createNumberInput(style.lineHeight ?? 1, 0, 0.1, (v) => update({ lineHeight: v })));
-  rootElement.appendChild(sizeRow);
+  container.appendChild(sizeRow);
 
   // Alignment
   const alignRow = createRow();
@@ -402,7 +429,7 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
     style.verticalAlignment ?? 'middle',
     (v) => update({ verticalAlignment: v }),
   ));
-  rootElement.appendChild(alignRow);
+  container.appendChild(alignRow);
 
   // Colors
   const colorRow = createRow();
@@ -416,7 +443,7 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
   bgLabel.style.fontSize = '12px';
   colorRow.appendChild(bgLabel);
   colorRow.appendChild(createColorInput(style.backgroundColor ?? '#ffffff', (v) => update({ backgroundColor: v })));
-  rootElement.appendChild(colorRow);
+  container.appendChild(colorRow);
 
   // Border color + width
   const borderRow = createRow();
@@ -429,12 +456,11 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
   borderRow.appendChild(createNumberInput(bwVal, 0, 0.1, (v) => {
     update({ borderWidth: { top: v, right: v, bottom: v, left: v } });
   }));
-  rootElement.appendChild(borderRow);
+  container.appendChild(borderRow);
 
   // Padding
-  rootElement.appendChild(createLabel('Padding'));
+  container.appendChild(createLabel('Padding'));
   const padRow = createRow();
-  const padTop = style.padding?.top ?? 5;
   const padLabels = ['T', 'R', 'B', 'L'];
   const padKeys = ['top', 'right', 'bottom', 'left'] as const;
   const padValues = [style.padding?.top ?? 5, style.padding?.right ?? 5, style.padding?.bottom ?? 5, style.padding?.left ?? 5];
@@ -445,11 +471,14 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
     padRow.appendChild(l);
     const key = padKeys[i];
     padRow.appendChild(createNumberInput(padValues[i], 0, 1, (v) => {
-      const current = style.padding ?? { top: 5, right: 5, bottom: 5, left: 5 };
-      update({ padding: { ...current, [key]: v } });
+      // Read fresh padding from the table to avoid stale closure
+      const { table } = getTableAndCommit(props);
+      const currentStyle = (table.getRegionStyle(region as any) as any) ?? {};
+      const currentPad = currentStyle.padding ?? { top: 5, right: 5, bottom: 5, left: 5 };
+      update({ padding: { ...currentPad, [key]: v } });
     }));
   }
-  rootElement.appendChild(padRow);
+  container.appendChild(padRow);
 
   // Alternate background color (body only)
   if (region === 'body') {
@@ -459,7 +488,7 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
     altLabel.style.fontSize = '12px';
     altRow.appendChild(altLabel);
     altRow.appendChild(createColorInput(style.alternateBackgroundColor ?? '#f5f5f5', (v) => update({ alternateBackgroundColor: v })));
-    rootElement.appendChild(altRow);
+    container.appendChild(altRow);
   }
 }
 
@@ -527,7 +556,8 @@ export function structureWidget(props: PropPanelWidgetProps): void {
     // Add column button
     const addBtn = createSmallButton('+', 'Add column', () => {
       const { table, commit } = getTC();
-      table.addHeaderCell('theader' as Region);
+      const result = table.addHeaderCell('theader' as Region);
+      if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
       commit();
     });
     addBtn.style.marginTop = '4px';
@@ -548,7 +578,8 @@ export function structureWidget(props: PropPanelWidgetProps): void {
     renderHeaderTree(container, lheaderNodes, 'lheader' as Region, getTC);
     const addBtn = createSmallButton('+', 'Add row', () => {
       const { table, commit } = getTC();
-      table.addHeaderCell('lheader' as Region);
+      const result = table.addHeaderCell('lheader' as Region);
+      if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
       commit();
     });
     addBtn.style.marginTop = '4px';
@@ -569,7 +600,8 @@ export function structureWidget(props: PropPanelWidgetProps): void {
     renderHeaderTree(container, rheaderNodes, 'rheader' as Region, getTC);
     const addBtn = createSmallButton('+', 'Add row', () => {
       const { table, commit } = getTC();
-      table.addHeaderCell('rheader' as Region);
+      const result = table.addHeaderCell('rheader' as Region);
+      if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
       commit();
     });
     addBtn.style.marginTop = '4px';
@@ -596,7 +628,8 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   rowRow.appendChild(createSmallButton('+', 'Add row', () => {
     const { table, commit } = getTC();
     const status = table.insertBodyRow(table.getRowHeights().length);
-    if (status === 'max-reached') showToast('Maximum rows reached');
+    if (status === 'max-reached') { showToast('Maximum rows reached'); return; }
+    if (status === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
     commit();
   }));
   rowRow.appendChild(createSmallButton('−', 'Remove last row', () => {
@@ -617,7 +650,8 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   colRow.appendChild(colLabel);
   colRow.appendChild(createSmallButton('+', 'Add column', () => {
     const { table, commit } = getTC();
-    table.addHeaderCell('theader' as Region);
+    const result = table.addHeaderCell('theader' as Region);
+    if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
     commit();
   }));
   colRow.appendChild(createSmallButton('−', 'Remove last column', () => {
@@ -648,7 +682,8 @@ export function structureWidget(props: PropPanelWidgetProps): void {
     renderHeaderTree(container, footerNodes, 'footer' as Region, getTC);
     const addBtn = createSmallButton('+', 'Add footer cell', () => {
       const { table, commit } = getTC();
-      table.addHeaderCell('footer' as Region);
+      const result = table.addHeaderCell('footer' as Region);
+      if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
       commit();
     });
     addBtn.style.marginTop = '4px';
@@ -756,7 +791,8 @@ function renderHeaderTree(
     if (region !== 'body') {
       nodeRow.appendChild(createSmallButton('+', 'Add child', () => {
         const { table, commit } = getTC();
-        table.addHeaderCell(region, node.cellId);
+        const result = table.addHeaderCell(region, node.cellId);
+        if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
         commit();
       }));
     }

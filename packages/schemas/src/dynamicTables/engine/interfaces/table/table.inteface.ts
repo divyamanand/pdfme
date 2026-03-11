@@ -8,14 +8,14 @@ import type { RenderableTableInstance } from "../../renderers/types/renderable-t
 
 export interface ITable {
     // Header operations
-    addHeaderCell(region: Region, parentId?: string, index?: number): string
+    addHeaderCell(region: Region, parentId?: string, index?: number): string | 'exceeds-bounds'
     removeHeaderCell(cellId: string, region: Region, isRoot: boolean, parentId?: string): void
 
     // Body operations
     buildBody(data: (string | number)[][]): void
-    insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached'
+    insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached' | 'exceeds-bounds'
     removeBodyRow(rowIndex: number): 'removed' | 'cleared'
-    insertBodyCol(colIndex: number, data?: (string | number)[]): 'added' | 'max-reached'
+    insertBodyCol(colIndex: number, data?: (string | number)[]): 'added' | 'max-reached' | 'exceeds-bounds'
     removeBodyCol(colIndex: number): 'removed' | 'cleared'
 
     // Cell access
