@@ -73,6 +73,8 @@ export class Table implements ITable {
     }
 
     private rebuildAndEvaluate(): void {
+        this.ensureMinRows()
+        this.ensureMaxRows()
         this.layoutEngine.rebuild()
         this.applyOverflowConstraints()
         this.ruleEngine?.evaluateAll()
@@ -256,9 +258,10 @@ export class Table implements ITable {
         }
     }
 
-    insertBodyRow(rowIndex: number, data?: (string | number)[]): void {
-        if (this.settings.maxRows !== undefined &&
-            this.structureStore.getBody().length >= this.settings.maxRows) return
+    insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached' {
+        const effectiveMax = this.getEffectiveMaxRows()
+        if (effectiveMax !== undefined &&
+            this.structureStore.getBody().length >= effectiveMax) return 'max-reached'
 
         const numCols = this.structureStore.getBody().length > 0
             ? this.structureStore.getBody()[0].length
@@ -272,9 +275,10 @@ export class Table implements ITable {
         this.structureStore.insertBodyRow(rowIndex, cellIds)
         this.layoutEngine.insertRowHeight(rowIndex, this.layoutEngine.getDefaultCellHeight())
         this.rebuildAndEvaluate()
+        return 'added'
     }
 
-    removeBodyRow(rowIndex: number): void {
+    removeBodyRow(rowIndex: number): 'removed' | 'cleared' {
         if (this.settings.minRows !== undefined &&
             this.structureStore.getBody().length <= this.settings.minRows) {
             const row = this.structureStore.getBody()[rowIndex]
@@ -283,13 +287,52 @@ export class Table implements ITable {
                     this.cellRegistry.updateCell(cellId, { rawValue: "", computedValue: undefined })
                 }
             }
-            return
+            this.rebuildAndEvaluate()
+            return 'cleared'
         }
 
         const removedIds = this.structureStore.removeBodyRow(rowIndex)
         for (const id of removedIds) this.cellRegistry.deleteCell(id)
         this.layoutEngine.removeRowHeight(rowIndex)
         this.rebuildAndEvaluate()
+        return 'removed'
+    }
+
+    private ensureMinRows(): void {
+        const minRows = this.settings.minRows
+        if (minRows === undefined) return
+        const body = this.structureStore.getBody()
+        const numCols = body.length > 0
+            ? body[0].length
+            : this.structureStore.getLeafCount("theader")
+        while (this.structureStore.getBody().length < minRows) {
+            const cellIds: string[] = []
+            for (let i = 0; i < numCols; i++) {
+                cellIds.push(this.cellRegistry.createCell("body", ""))
+            }
+            const idx = this.structureStore.getBody().length
+            this.structureStore.insertBodyRow(idx, cellIds)
+            this.layoutEngine.insertRowHeight(idx, this.layoutEngine.getDefaultCellHeight())
+        }
+    }
+
+    private getEffectiveMaxRows(): number | undefined {
+        const { maxRows, minRows } = this.settings
+        if (maxRows === undefined && minRows === undefined) return undefined
+        if (maxRows === undefined) return undefined
+        if (minRows === undefined) return maxRows
+        return Math.max(maxRows, minRows)
+    }
+
+    private ensureMaxRows(): void {
+        const maxRows = this.getEffectiveMaxRows()
+        if (maxRows === undefined) return
+        while (this.structureStore.getBody().length > maxRows) {
+            const lastIdx = this.structureStore.getBody().length - 1
+            const removedIds = this.structureStore.removeBodyRow(lastIdx)
+            for (const id of removedIds) this.cellRegistry.deleteCell(id)
+            this.layoutEngine.removeRowHeight(lastIdx)
+        }
     }
 
     insertBodyCol(colIndex: number, data?: (string | number)[]): void {

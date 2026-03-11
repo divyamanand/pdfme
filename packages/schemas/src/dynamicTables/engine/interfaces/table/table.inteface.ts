@@ -12,8 +12,8 @@ export interface ITable {
 
     // Body operations
     buildBody(data: (string | number)[][]): void
-    insertBodyRow(rowIndex: number, data?: (string | number)[]): void
-    removeBodyRow(rowIndex: number): void
+    insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached'
+    removeBodyRow(rowIndex: number): 'removed' | 'cleared'
     insertBodyCol(colIndex: number, data?: (string | number)[]): void
     removeBodyCol(colIndex: number): void
 

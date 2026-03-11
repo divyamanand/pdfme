@@ -10,6 +10,7 @@
 
 import type { Table, Region, Rect, TableStyle, RegionStyle, BodyRegionStyle, TableSettings } from './engine/index.js';
 import { instanceManager } from './instanceManager.js';
+import { showToast } from './helpers/toast.js';
 
 type OnChangeFn = (arg: { key: string; value: unknown } | { key: string; value: unknown }[]) => void;
 
@@ -35,15 +36,30 @@ export function createActionDispatch(schemaName: string, onChange: OnChangeFn): 
     onChange({ key: 'content', value: newValue });
   }
 
+  function dispatchWithResult<R>(mutator: (table: Table) => R): R {
+    let result!: R;
+    const newValue = instanceManager.update(schemaName, (t) => { result = mutator(t); });
+    onChange({ key: 'content', value: newValue });
+    return result;
+  }
+
   return {
     updateCell: (cellId, rawValue) =>
       dispatch((t) => t.updateCell(cellId, { rawValue })),
 
-    insertBodyRow: (rowIndex?) =>
-      dispatch((t) => t.insertBodyRow(rowIndex ?? t.getRowHeights().length)),
+    insertBodyRow: (rowIndex?) => {
+      const status = dispatchWithResult((t) => t.insertBodyRow(rowIndex ?? t.getRowHeights().length));
+      if (status === 'max-reached') {
+        showToast('Maximum number of rows reached');
+      }
+    },
 
-    removeBodyRow: (rowIndex) =>
-      dispatch((t) => t.removeBodyRow(rowIndex)),
+    removeBodyRow: (rowIndex) => {
+      const status = dispatchWithResult((t) => t.removeBodyRow(rowIndex));
+      if (status === 'cleared') {
+        showToast('Minimum rows reached — row cleared instead of removed');
+      }
+    },
 
     addColumn: () =>
       dispatch((t) => t.addHeaderCell('theader')),
