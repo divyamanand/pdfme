@@ -1,25 +1,20 @@
 /**
  * Column and row drag resize handles for the dynamic table UI.
- * Follows the exact pattern from tables/uiRender.ts:355-425.
  */
 
-import type { RenderableTableInstance } from '../engine/index.js';
-import type { ActionDispatch } from '../actionDispatch.js';
+import type { RenderableTableInstance, Table } from '../engine/index.js';
 import { ZOOM } from '@pdfme/common';
-import { resetState } from '../uiState.js';
 
 const HANDLE_WIDTH = 5; // px
 
-/**
- * Append draggable column resize handles between columns (designer mode).
- */
 export function appendColumnResizeHandles(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
   scale: number,
 ): void {
-  const { columns } = renderable;
+  const { columns } = snapshot;
   let offsetX = 0;
 
   for (let i = 0; i < columns.length; i++) {
@@ -56,7 +51,7 @@ export function appendColumnResizeHandles(
     const currentWidth = column.width;
 
     handle.addEventListener('mousedown', (e) => {
-      resetState();
+      table.clearSelection();
       handle.removeEventListener('mouseover', setColor);
       handle.removeEventListener('mouseout', resetColor);
 
@@ -79,7 +74,8 @@ export function appendColumnResizeHandles(
 
       const commitResize = () => {
         if (move !== 0) {
-          dispatch.setColumnWidth(colIndex, currentWidth + move);
+          table.setColumnWidth(colIndex, currentWidth + move);
+          commit();
         }
         move = 0;
         handle.addEventListener('mouseover', setColor);
@@ -94,17 +90,15 @@ export function appendColumnResizeHandles(
   }
 }
 
-/**
- * Append draggable row resize handles between rows (designer mode).
- */
 export function appendRowResizeHandles(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
   scale: number,
 ): void {
-  const bodyRows = renderable.getRowsInRegion('body');
-  let offsetY = renderable.getHeadHeight();
+  const bodyRows = snapshot.getRowsInRegion('body');
+  let offsetY = snapshot.getHeadHeight();
 
   for (let i = 0; i < bodyRows.length; i++) {
     const row = bodyRows[i];
@@ -140,7 +134,7 @@ export function appendRowResizeHandles(
     const currentHeight = row.height;
 
     handle.addEventListener('mousedown', (e) => {
-      resetState();
+      table.clearSelection();
       handle.removeEventListener('mouseover', setColor);
       handle.removeEventListener('mouseout', resetColor);
 
@@ -163,7 +157,8 @@ export function appendRowResizeHandles(
 
       const commitResize = () => {
         if (move !== 0) {
-          dispatch.setRowHeight(rowIndex, currentHeight + move);
+          table.setRowHeight(rowIndex, currentHeight + move);
+          commit();
         }
         move = 0;
         handle.addEventListener('mouseover', setColor);
@@ -178,7 +173,6 @@ export function appendRowResizeHandles(
   }
 }
 
-/** Convert pixels to mm (1px ≈ 0.2646mm) */
 function pxToMm(px: number): number {
   return px / ZOOM;
 }

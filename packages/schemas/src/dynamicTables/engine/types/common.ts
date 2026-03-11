@@ -158,3 +158,13 @@ export interface TableSettings {
     defaultCellWidth?: number
     defaultCellHeight?: number
 }
+
+// ---------------------------------------------------------------------------
+// Transient UI state (not serialized)
+// ---------------------------------------------------------------------------
+
+export interface UIState {
+    editingCellId: string | null
+    selectedCells: ReadonlySet<string>
+    selectionAnchor: { row: number; col: number; region: string } | null
+}

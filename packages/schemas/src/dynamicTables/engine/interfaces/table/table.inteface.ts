@@ -1,9 +1,10 @@
 import { ICell } from "../core"
-import { CellPayload, CellStyle, Region, TableSettings, TablePosition, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap } from "../../types"
+import { CellPayload, CellStyle, Region, TableSettings, TablePosition, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap, UIState } from "../../types"
 import { Rect } from "../../types/common"
 import type { IRuleEngine } from "../rules/rule-engine.interface"
 import type { EvaluationResult } from "../../rules/types/evaluation.types"
 import type { TableExportData } from "../../renderers/types/serialization.types"
+import type { RenderableTableInstance } from "../../renderers/types/renderable-types"
 
 export interface ITable {
     // Header operations
@@ -58,4 +59,20 @@ export interface ITable {
 
     // Serialization
     exportState(): TableExportData
+
+    // UI State (transient)
+    getUIState(): UIState
+    startEditing(cellId: string): void
+    stopEditing(): void
+    selectCell(cellId: string): void
+    selectCells(cellIds: string[]): void
+    setSelectionAnchor(anchor: { row: number; col: number; region: string } | null): void
+    clearSelection(): void
+    resetUIState(): void
+
+    // Render snapshot
+    getRenderSnapshot(): RenderableTableInstance
+
+    // Aliases
+    toJSON(): string
 }

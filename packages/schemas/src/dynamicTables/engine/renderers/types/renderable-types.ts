@@ -95,6 +95,10 @@ export interface RenderableTableInstance {
   // Rule results
   evaluationResults: Map<string, EvaluationResult>
 
+  // Transient UI state
+  editingCellId: string | null
+  selectedCellIds: ReadonlySet<string>
+
   // Helper methods
   getCellAt(row: number, col: number, region: Region): RenderableCell | undefined
   getCellByID(cellID: string): RenderableCell | undefined

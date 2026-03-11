@@ -3,11 +3,18 @@
  */
 
 import type { UIRenderProps } from '@pdfme/common';
-import type { RenderableTableInstance } from '../engine/index.js';
+import type { RenderableTableInstance, Table } from '../engine/index.js';
 import type { DynamicTableSchema } from '../types.js';
-import type { ActionDispatch } from '../actionDispatch.js';
-import { state, dismissContextMenu } from '../uiState.js';
 import { buildMergeRect } from './cellSelection.js';
+
+let contextMenuEl: HTMLDivElement | null = null;
+
+function dismissContextMenu(): void {
+  if (contextMenuEl) {
+    contextMenuEl.remove();
+    contextMenuEl = null;
+  }
+}
 
 interface MenuItemDef {
   label: string;
@@ -15,14 +22,11 @@ interface MenuItemDef {
   onClick: () => void;
 }
 
-/**
- * Attach a contextmenu listener to the root element for designer mode.
- * When right-clicking a cell, shows a menu with structural operations.
- */
 export function attachContextMenu(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
   reRender: (arg: UIRenderProps<DynamicTableSchema>) => Promise<void>,
   arg: UIRenderProps<DynamicTableSchema>,
 ): void {
@@ -34,13 +38,13 @@ export function attachContextMenu(
     if (!target) return;
 
     const cellId = target.dataset.cellId!;
-    const cell = renderable.getCellByID(cellId);
+    const cell = snapshot.getCellByID(cellId);
     if (!cell) return;
 
     const rowIndex = cell.layout.row;
     const colIndex = cell.layout.col;
 
-    const mergeRect = buildMergeRect(renderable);
+    const mergeRect = buildMergeRect(table, snapshot);
     const hasMerge = !!cell.mergeRect;
 
     const items: (MenuItemDef | 'separator')[] = [
@@ -48,45 +52,45 @@ export function attachContextMenu(
         label: 'Merge Cells',
         enabled: mergeRect !== null,
         onClick: () => {
-          if (mergeRect) dispatch.mergeCells(mergeRect);
+          if (mergeRect) { table.mergeCells(mergeRect); commit(); }
         },
       },
       {
         label: 'Unmerge Cell',
         enabled: hasMerge,
-        onClick: () => dispatch.unmergeCells(cellId),
+        onClick: () => { table.unmergeCells(cellId); commit(); },
       },
       'separator',
       {
         label: 'Insert Row Above',
         enabled: cell.inRegion === 'body',
-        onClick: () => dispatch.insertBodyRow(rowIndex),
+        onClick: () => { table.insertBodyRow(rowIndex); commit(); },
       },
       {
         label: 'Insert Row Below',
         enabled: cell.inRegion === 'body',
-        onClick: () => dispatch.insertBodyRow(rowIndex + 1),
+        onClick: () => { table.insertBodyRow(rowIndex + 1); commit(); },
       },
       {
         label: 'Insert Column Left',
         enabled: true,
-        onClick: () => dispatch.insertBodyCol(colIndex),
+        onClick: () => { table.insertBodyCol(colIndex); commit(); },
       },
       {
         label: 'Insert Column Right',
         enabled: true,
-        onClick: () => dispatch.insertBodyCol(colIndex + 1),
+        onClick: () => { table.insertBodyCol(colIndex + 1); commit(); },
       },
       'separator',
       {
         label: 'Delete Row',
         enabled: cell.inRegion === 'body',
-        onClick: () => dispatch.removeBodyRow(rowIndex),
+        onClick: () => { table.removeBodyRow(rowIndex); commit(); },
       },
       {
         label: 'Delete Column',
-        enabled: renderable.columns.length > 1,
-        onClick: () => dispatch.removeBodyCol(colIndex),
+        enabled: snapshot.columns.length > 1,
+        onClick: () => { table.removeBodyCol(colIndex); commit(); },
       },
     ];
 
@@ -95,15 +99,13 @@ export function attachContextMenu(
       void reRender(arg);
     });
 
-    // Position the menu at click coordinates relative to root
     const rootRect = root.getBoundingClientRect();
     menu.style.left = `${e.clientX - rootRect.left}px`;
     menu.style.top = `${e.clientY - rootRect.top}px`;
 
-    state.contextMenuEl = menu;
+    contextMenuEl = menu;
     root.appendChild(menu);
 
-    // Dismiss on outside click or Escape
     const dismissHandler = (ev: MouseEvent) => {
       if (!menu.contains(ev.target as Node)) {
         dismissContextMenu();
@@ -116,7 +118,6 @@ export function attachContextMenu(
         document.removeEventListener('keydown', escHandler);
       }
     };
-    // Defer to avoid the current contextmenu event triggering dismiss
     setTimeout(() => {
       document.addEventListener('mousedown', dismissHandler);
       document.addEventListener('keydown', escHandler);

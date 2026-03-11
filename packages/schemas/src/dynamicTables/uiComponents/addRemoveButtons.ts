@@ -1,44 +1,43 @@
 /**
  * Add/remove row and column buttons for the dynamic table UI.
- * Follows the same positioning pattern as tables/uiRender.ts.
  */
 
-import type { RenderableTableInstance } from '../engine/index.js';
-import type { ActionDispatch } from '../actionDispatch.js';
+import type { RenderableTableInstance, Table } from '../engine/index.js';
 import { createButton } from './createButton.js';
 import { px2mm } from '@pdfme/common';
+import { showToast } from '../helpers/toast.js';
 
 const BUTTON_SIZE = 30;
 
-/**
- * Append a "+" button below the table to add a new body row.
- */
 export function appendAddRowButton(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
 ): void {
   const button = createButton({
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
-    top: `${renderable.getHeight()}mm`,
+    top: `${snapshot.getHeight()}mm`,
     left: `calc(50% - ${BUTTON_SIZE / 2}px)`,
     text: '+',
-    onClick: () => dispatch.insertBodyRow(),
+    onClick: () => {
+      const status = table.insertBodyRow(table.getRowHeights().length);
+      if (status === 'max-reached') showToast('Maximum number of rows reached');
+      commit();
+    },
   });
   root.appendChild(button);
 }
 
-/**
- * Append a "-" button to the right of each body row.
- */
 export function appendRemoveRowButtons(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
 ): void {
-  const bodyRows = renderable.getRowsInRegion('body');
-  let offsetY = renderable.getHeadHeight();
+  const bodyRows = snapshot.getRowsInRegion('body');
+  let offsetY = snapshot.getHeadHeight();
 
   for (const row of bodyRows) {
     offsetY += row.height;
@@ -49,21 +48,23 @@ export function appendRemoveRowButtons(
       top: `${offsetY - px2mm(BUTTON_SIZE)}mm`,
       right: `-${BUTTON_SIZE}px`,
       text: '-',
-      onClick: () => dispatch.removeBodyRow(rowIndex),
+      onClick: () => {
+        const status = table.removeBodyRow(rowIndex);
+        if (status === 'cleared') showToast('Minimum rows reached — row cleared instead of removed');
+        commit();
+      },
     });
     root.appendChild(button);
   }
 }
 
-/**
- * Append a "+" button at top-right to add a new column (designer mode).
- */
 export function appendAddColumnButton(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
 ): void {
-  const headHeight = renderable.getHeadHeight();
+  const headHeight = snapshot.getHeadHeight();
   const button = createButton({
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
@@ -72,21 +73,20 @@ export function appendAddColumnButton(
     text: '+',
     onClick: (e) => {
       e.preventDefault();
-      dispatch.addColumn();
+      table.addHeaderCell('theader');
+      commit();
     },
   });
   root.appendChild(button);
 }
 
-/**
- * Append a "-" button above each column to remove it (designer mode).
- */
 export function appendRemoveColumnButtons(
   root: HTMLElement,
-  renderable: RenderableTableInstance,
-  dispatch: ActionDispatch,
+  snapshot: RenderableTableInstance,
+  table: Table,
+  commit: () => void,
 ): void {
-  const { columns } = renderable;
+  const { columns } = snapshot;
   if (columns.length <= 1) return;
 
   let offsetX = 0;
@@ -98,7 +98,11 @@ export function appendRemoveColumnButtons(
       top: `-${BUTTON_SIZE}px`,
       left: `${offsetX + column.width / 2 - px2mm(BUTTON_SIZE / 2)}mm`,
       text: '-',
-      onClick: () => dispatch.removeBodyCol(colIndex),
+      onClick: () => {
+        const status = table.removeBodyCol(colIndex);
+        if (status === 'cleared') showToast('Minimum columns reached — column cleared instead of removed');
+        commit();
+      },
     });
     root.appendChild(button);
     offsetX += column.width;

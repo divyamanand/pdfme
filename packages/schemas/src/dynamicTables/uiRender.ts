@@ -1,9 +1,8 @@
 /**
  * UI Renderer for the Dynamic Table pdfme plugin.
  *
- * Renders the table into the rootElement provided by pdfme.
- * Each cell is positioned absolutely based on layout data from our engine.
- * Cell content rendering delegates to pdfme's existing cell UI renderer.
+ * Pure rendering from Table.getRenderSnapshot().
+ * All mutations go through the Table facade directly.
  *
  * Modes:
  * - viewer: Read-only display
@@ -13,12 +12,10 @@
 
 import type { UIRenderProps, Mode } from '@pdfme/common';
 import cell from '../tables/cell.js';
-import type { Region } from './engine/index.js';
+import type { Table, Region } from './engine/index.js';
 import type { DynamicTableSchema } from './types.js';
-import { instanceManager } from './instanceManager.js';
+import { getTable, commitTable } from './instanceManager.js';
 import { toPdfmeCellSchema, getCellDisplayValue } from './helpers/cellSchemaMapper.js';
-import { createActionDispatch } from './actionDispatch.js';
-import { state, resetState } from './uiState.js';
 import {
   appendAddRowButton,
   appendRemoveRowButtons,
@@ -35,21 +32,24 @@ const cellUiRender = cell.ui;
 /** Region iteration order */
 const REGION_ORDER: Region[] = ['theader', 'lheader', 'rheader', 'body', 'footer'];
 
+/** Commit a table mutation and notify pdfme */
+function commit(table: Table, schemaName: string, onChange: (arg: { key: string; value: unknown } | { key: string; value: unknown }[]) => void): void {
+  const json = commitTable(schemaName, table);
+  onChange({ key: 'content', value: json });
+}
+
 /**
  * pdfme ui() function for the dynamic table plugin.
  *
  * Flow:
- * 1. Parse value → Table → RenderableTableInstance (via InstanceManager)
- * 2. Clear rootElement
- * 3. Create absolutely-positioned cell divs based on layout data
- * 4. Delegate each cell's rendering to cellUiRender with mode delegation
- * 5. Append interactive controls based on mode
- * 6. Auto-fit height
+ * 1. Get cached Table → getRenderSnapshot()
+ * 2. Render cells from snapshot
+ * 3. Attach interactive controls that call Table directly
  */
 export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<void> {
   const { schema, value, rootElement, mode, onChange, scale } = arg;
-  const { renderable } = instanceManager.getOrCreate(schema.name, value);
-  const dispatch = onChange ? createActionDispatch(schema.name, onChange) : null;
+  const table = getTable(schema.name, value);
+  const snapshot = table.getRenderSnapshot();
 
   // Clear previous render
   rootElement.innerHTML = '';
@@ -60,7 +60,7 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
   rootElement.style.height = '100%';
   rootElement.style.overflow = 'visible';
 
-  const { settings, tableStyle } = renderable;
+  const { settings, tableStyle } = snapshot;
 
   // Table outer border
   if (tableStyle.borderColor) {
@@ -70,15 +70,13 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
 
   // Render cells region by region
   for (const region of REGION_ORDER) {
-    // Skip hidden headers
     if (region === 'theader' && settings.headerVisibility?.theader === false) continue;
     if (region === 'lheader' && settings.headerVisibility?.lheader === false) continue;
     if (region === 'rheader' && settings.headerVisibility?.rheader === false) continue;
 
-    const rows = renderable.getRowsInRegion(region);
+    const rows = snapshot.getRowsInRegion(region);
     for (const row of rows) {
       for (const [colIdx, renderableCell] of row.cells) {
-        // Create cell container
         const cellDiv = document.createElement('div');
         cellDiv.style.position = 'absolute';
         cellDiv.style.left = `${renderableCell.layout.x}mm`;
@@ -89,9 +87,9 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
         cellDiv.dataset.cellId = renderableCell.cellID;
         cellDiv.dataset.region = region;
 
-        // Mode-based cell rendering (tables pattern from tables/uiRender.ts:147-154)
-        const isEditing = state.editingCellId === renderableCell.cellID;
-        const isSelected = state.selectedCells.has(renderableCell.cellID);
+        // Read UI state from snapshot
+        const isEditing = snapshot.editingCellId === renderableCell.cellID;
+        const isSelected = snapshot.selectedCellIds.has(renderableCell.cellID);
 
         let cellMode: Mode = 'viewer';
         if (mode === 'form') {
@@ -100,19 +98,15 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
           cellMode = isEditing ? 'designer' : 'form';
         }
 
-        // Selection highlight
         if (isSelected && mode === 'designer') {
           cellDiv.style.boxShadow = 'inset 0 0 0 2px #2196f3';
         }
 
-        // Cursor style
         const isEditable = (mode === 'form' && region === 'body' && !schema.readOnly) || mode === 'designer';
         cellDiv.style.cursor = isEditable ? 'text' : 'default';
 
-        // Map to pdfme cell schema and render
         const cellSchema = toPdfmeCellSchema(renderableCell, 0, 0);
         const displayValue = getCellDisplayValue(renderableCell);
-
         const cellId = renderableCell.cellID;
         const rowIdx = row.rowIndex;
 
@@ -123,27 +117,27 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
           rootElement: cellDiv,
           mode: cellMode,
           stopEditing: () => {
-            resetState();
+            table.resetUIState();
             void uiRender(arg);
           },
           onChange: (v) => {
-            if (!dispatch) return;
+            if (!onChange) return;
             const newVal = (Array.isArray(v) ? v[0].value : v.value) as string;
-            dispatch.updateCell(cellId, newVal);
+            table.updateCell(cellId, { rawValue: newVal });
+            commit(table, schema.name, onChange);
           },
         });
 
-        // Click handler for cell selection and editing
         cellDiv.addEventListener('click', (e) => {
           if (mode === 'viewer') return;
           if (mode === 'form' && region !== 'body') return;
           if (mode === 'form' && schema.readOnly) return;
 
           if (mode === 'designer') {
-            handleCellClick(cellId, rowIdx, colIdx, region, e.shiftKey, renderable);
+            handleCellClick(table, cellId, rowIdx, colIdx, region, e.shiftKey, snapshot);
           }
 
-          state.editingCellId = cellId;
+          table.startEditing(cellId);
           void uiRender(arg);
         });
 
@@ -152,32 +146,35 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     }
   }
 
+  // Commit helper for uiComponents
+  const doCommit = onChange ? () => commit(table, schema.name, onChange) : undefined;
+
   // Form mode controls
-  if (mode === 'form' && dispatch && !schema.readOnly) {
-    appendAddRowButton(rootElement, renderable, dispatch);
-    appendRemoveRowButtons(rootElement, renderable, dispatch);
+  if (mode === 'form' && doCommit && !schema.readOnly) {
+    appendAddRowButton(rootElement, snapshot, table, doCommit);
+    appendRemoveRowButtons(rootElement, snapshot, table, doCommit);
   }
 
   // Designer mode controls
-  if (mode === 'designer' && dispatch) {
-    appendAddRowButton(rootElement, renderable, dispatch);
-    appendRemoveRowButtons(rootElement, renderable, dispatch);
-    appendAddColumnButton(rootElement, renderable, dispatch);
-    appendRemoveColumnButtons(rootElement, renderable, dispatch);
-    appendColumnResizeHandles(rootElement, renderable, dispatch, scale);
-    appendRowResizeHandles(rootElement, renderable, dispatch, scale);
-    attachContextMenu(rootElement, renderable, dispatch, uiRender, arg);
+  if (mode === 'designer' && doCommit) {
+    appendAddRowButton(rootElement, snapshot, table, doCommit);
+    appendRemoveRowButtons(rootElement, snapshot, table, doCommit);
+    appendAddColumnButton(rootElement, snapshot, table, doCommit);
+    appendRemoveColumnButtons(rootElement, snapshot, table, doCommit);
+    appendColumnResizeHandles(rootElement, snapshot, table, doCommit, scale);
+    appendRowResizeHandles(rootElement, snapshot, table, doCommit, scale);
+    attachContextMenu(rootElement, snapshot, table, doCommit, uiRender, arg);
   }
 
   // Viewer mode: reset editing state
   if (mode === 'viewer') {
-    resetState();
+    table.resetUIState();
   }
 
   // Auto-fit bounding box to match table dimensions
   if (onChange) {
-    const tableWidth = renderable.getWidth();
-    const tableHeight = renderable.getHeight();
+    const tableWidth = snapshot.getWidth();
+    const tableHeight = snapshot.getHeight();
     const changes: { key: string; value: unknown }[] = [];
     if (Math.abs(schema.width - tableWidth) > 0.01) {
       changes.push({ key: 'width', value: tableWidth });

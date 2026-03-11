@@ -2,7 +2,7 @@ import { ICellRegistry, ILayoutEngine, IMergeRegistry, IStructureStore, ITable }
 import { ICell } from "../interfaces/core"
 import { IRuleEngine } from "../interfaces/rules/rule-engine.interface"
 import { EvaluationResult } from "../rules/types/evaluation.types"
-import { CellPayload, CellStyle, Region, TableSettings, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap } from "../types"
+import { CellPayload, CellStyle, Region, TableSettings, TableStyle, RegionStyle, BodyRegionStyle, RegionStyleMap, UIState } from "../types"
 import { Rect } from "../types/common"
 import type { SerializedHeaderNode, SerializedBodyCell, TableExportData } from "../renderers/types/serialization.types"
 import { StructureStore } from "../stores/structure.store"
@@ -13,6 +13,14 @@ import { OverflowEngine } from "../engines/overflow.engine"
 import { RuleRegistry } from "../rules/rule-registry"
 import { RuleEngine } from "../rules/rule-engine"
 import { defaultTableStyle } from "../styles/defaults"
+import { resolveStyle } from "../styles/resolve"
+import type {
+    RenderableCell,
+    RenderableRow,
+    RenderableColumn,
+    RenderableMerge,
+    RenderableTableInstance,
+} from "../renderers/types/renderable-types"
 
 const DEFAULT_TABLE_SETTINGS: TableSettings = {
     overflow: 'wrap',
@@ -34,6 +42,13 @@ export class Table implements ITable {
     private _tableStyle: TableStyle
     private _regionStyles: RegionStyleMap
     private _overflowStylePatches: Map<string, Partial<CellStyle>> = new Map()
+
+    // Transient UI state (not serialized)
+    private _uiState: { editingCellId: string | null; selectedCells: Set<string>; selectionAnchor: { row: number; col: number; region: string } | null } = {
+        editingCellId: null,
+        selectedCells: new Set(),
+        selectionAnchor: null,
+    }
 
     constructor(
         structureStore: IStructureStore,
@@ -516,6 +531,187 @@ export class Table implements ITable {
 
     getCompleteGrid(): string[][] {
         return this.layoutEngine.getCompleteGrid()
+    }
+
+    // --- UI State (transient, not serialized) ---
+
+    getUIState(): UIState {
+        return {
+            editingCellId: this._uiState.editingCellId,
+            selectedCells: this._uiState.selectedCells,
+            selectionAnchor: this._uiState.selectionAnchor,
+        }
+    }
+
+    startEditing(cellId: string): void {
+        this._uiState.editingCellId = cellId
+    }
+
+    stopEditing(): void {
+        this._uiState.editingCellId = null
+    }
+
+    selectCell(cellId: string): void {
+        this._uiState.selectedCells.clear()
+        this._uiState.selectedCells.add(cellId)
+    }
+
+    selectCells(cellIds: string[]): void {
+        this._uiState.selectedCells.clear()
+        for (const id of cellIds) this._uiState.selectedCells.add(id)
+    }
+
+    setSelectionAnchor(anchor: { row: number; col: number; region: string } | null): void {
+        this._uiState.selectionAnchor = anchor
+    }
+
+    clearSelection(): void {
+        this._uiState.selectedCells.clear()
+        this._uiState.selectionAnchor = null
+    }
+
+    resetUIState(): void {
+        this._uiState.editingCellId = null
+        this._uiState.selectedCells.clear()
+        this._uiState.selectionAnchor = null
+    }
+
+    // --- Render Snapshot ---
+
+    getRenderSnapshot(): RenderableTableInstance {
+        const settings = this.getSettings()
+        const tableStyle = this.getTableStyle()
+        const regionStyles = this.getRegionStyles()
+        const columnWidths = this.getColumnWidths()
+        const rowHeights = this.getRowHeights()
+        const uiState = this.getUIState()
+
+        const cellsById = new Map<string, RenderableCell>()
+        const evaluationResults = new Map<string, any>()
+
+        const regions: Record<Region, RenderableRow[]> = {
+            theader: [], lheader: [], rheader: [], footer: [], body: [],
+        }
+
+        const rowIndexByRegion: Record<Region, number> = {
+            theader: 0, lheader: 0, rheader: 0, footer: 0, body: 0,
+        }
+
+        const regionList: Region[] = ['theader', 'lheader', 'rheader', 'footer', 'body']
+
+        for (let rowIdx = 0; rowIdx < rowHeights.length; rowIdx++) {
+            const rowCellsByRegion: Record<Region, RenderableCell[]> = {
+                theader: [], lheader: [], rheader: [], footer: [], body: [],
+            }
+
+            for (let colIdx = 0; colIdx < columnWidths.length; colIdx++) {
+                const cell = this.getCellByAddress(rowIdx, colIdx)
+                if (cell) {
+                    const evalResult = cell.isDynamic ? this.getEvaluationResult(cell.cellID) : undefined
+                    if (evalResult) evaluationResults.set(cell.cellID, evalResult)
+
+                    const regionStyle = regionStyles[cell.inRegion]
+                    const overflowPatch = this.getOverflowStylePatch(cell.cellID)
+                    const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides, overflowPatch)
+
+                    const renderableCell: RenderableCell = {
+                        cellID: cell.cellID,
+                        rawValue: cell.rawValue,
+                        computedValue: cell.computedValue,
+                        layout: cell.layout!,
+                        style: resolvedStyle,
+                        inRegion: cell.inRegion,
+                        evaluationResult: evalResult,
+                        isDynamic: cell.isDynamic,
+                        mergeRect: undefined,
+                    }
+
+                    cellsById.set(cell.cellID, renderableCell)
+                    rowCellsByRegion[cell.inRegion].push(renderableCell)
+                }
+            }
+
+            for (const region of regionList) {
+                if (rowCellsByRegion[region].length > 0) {
+                    const cells = new Map<number, RenderableCell>()
+                    const rawValues: (string | number)[] = []
+                    let colIdx = 0
+                    for (const c of rowCellsByRegion[region]) {
+                        cells.set(colIdx, c)
+                        rawValues.push(c.rawValue)
+                        colIdx++
+                    }
+                    regions[region].push({
+                        rowIndex: rowIndexByRegion[region],
+                        region,
+                        height: rowHeights[rowIdx] || 20,
+                        cells,
+                        rawValues,
+                    })
+                    rowIndexByRegion[region]++
+                }
+            }
+        }
+
+        const columns: RenderableColumn[] = columnWidths.map((width, idx) => ({
+            colIndex: idx,
+            width,
+        }))
+
+        const mergeSet = this.getMerges()
+        const merges: RenderableMerge[] = Array.from(mergeSet.values()).map((rect) => ({
+            cellID: rect.cellId,
+            startRow: rect.startRow,
+            startCol: rect.startCol,
+            endRow: rect.endRow,
+            endCol: rect.endCol,
+            primaryRegion: rect.primaryRegion || 'body',
+        }))
+
+        const getHeadHeight = (): number =>
+            (regions.theader.reduce((s, r) => s + r.height, 0)) +
+            (regions.lheader.reduce((s, r) => s + r.height, 0)) +
+            (regions.rheader.reduce((s, r) => s + r.height, 0))
+
+        const getBodyHeight = (): number =>
+            regions.body.reduce((s, r) => s + r.height, 0)
+
+        const getFooterHeight = (): number =>
+            regions.footer.reduce((s, r) => s + r.height, 0)
+
+        const getWidth = (): number =>
+            columns.reduce((s, c) => s + c.width, 0)
+
+        return {
+            settings,
+            tableStyle,
+            regionStyles,
+            columns,
+            regions,
+            cellsById,
+            merges,
+            evaluationResults,
+            editingCellId: uiState.editingCellId,
+            selectedCellIds: uiState.selectedCells,
+            getCellAt(row, col, region) { return this.regions[region][row]?.cells.get(col) },
+            getCellByID(cellID) { return this.cellsById.get(cellID) },
+            getRowsInRegion(region) { return this.regions[region] },
+            getWidth() { return getWidth() },
+            getHeight() { return getHeadHeight() + getBodyHeight() + getFooterHeight() },
+            getHeadHeight() { return getHeadHeight() },
+            getBodyHeight() { return getBodyHeight() },
+            getFooterHeight() { return getFooterHeight() },
+        }
+    }
+
+    // --- Aliases ---
+
+    toJSON(): string {
+        return JSON.stringify(this.exportState())
+    }
+
+    static fromJSON(json: string): Table {
+        return Table.fromExportData(JSON.parse(json))
     }
 
     // --- Serialization ---

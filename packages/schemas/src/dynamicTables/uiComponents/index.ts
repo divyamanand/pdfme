@@ -6,5 +6,5 @@ export {
   appendRemoveColumnButtons,
 } from './addRemoveButtons.js';
 export { appendColumnResizeHandles, appendRowResizeHandles } from './resizeHandles.js';
-export { handleCellClick, buildMergeRect, clearSelection } from './cellSelection.js';
+export { handleCellClick, buildMergeRect } from './cellSelection.js';
 export { attachContextMenu } from './contextMenu.js';

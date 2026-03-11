@@ -20,9 +20,6 @@ export { OverflowEngine } from './engines/overflow.engine';
 export { RuleEngine } from './rules/rule-engine';
 export { RuleRegistry } from './rules/rule-registry';
 
-// Renderers
-export { RenderableTable } from './renderers/renderable-table';
-
 // Types — renderable
 export type {
   RenderableTableInstance,
@@ -55,4 +52,5 @@ export type {
   Spacing,
   Rect,
   CellPayload,
+  UIState,
 } from './types/common';

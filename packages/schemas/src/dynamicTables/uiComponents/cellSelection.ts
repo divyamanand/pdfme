@@ -1,10 +1,9 @@
 /**
  * Cell selection tracking for the dynamic table designer mode.
- * Supports single click and shift+click range selection.
+ * Uses Table's UI state instead of module-level singletons.
  */
 
-import type { RenderableTableInstance, Rect, Region } from '../engine/index.js';
-import { state } from '../uiState.js';
+import type { RenderableTableInstance, Table, Rect, Region } from '../engine/index.js';
 
 /**
  * Handle a cell click for selection purposes.
@@ -12,55 +11,58 @@ import { state } from '../uiState.js';
  * With shift: rectangular range from anchor to clicked cell.
  */
 export function handleCellClick(
+  table: Table,
   cellId: string,
   row: number,
   col: number,
   region: string,
   shiftKey: boolean,
-  renderable: RenderableTableInstance,
+  snapshot: RenderableTableInstance,
 ): void {
+  const uiState = table.getUIState();
+
   if (!shiftKey) {
-    state.selectedCells.clear();
-    state.selectedCells.add(cellId);
-    state.selectionAnchor = { row, col, region };
+    table.selectCell(cellId);
+    table.setSelectionAnchor({ row, col, region });
     return;
   }
 
   // Shift+click: range selection from anchor
-  if (!state.selectionAnchor || state.selectionAnchor.region !== region) {
-    // No anchor or different region — just single select
-    state.selectedCells.clear();
-    state.selectedCells.add(cellId);
-    state.selectionAnchor = { row, col, region };
+  const anchor = uiState.selectionAnchor;
+  if (!anchor || anchor.region !== region) {
+    table.selectCell(cellId);
+    table.setSelectionAnchor({ row, col, region });
     return;
   }
 
-  const anchor = state.selectionAnchor;
   const minRow = Math.min(anchor.row, row);
   const maxRow = Math.max(anchor.row, row);
   const minCol = Math.min(anchor.col, col);
   const maxCol = Math.max(anchor.col, col);
 
-  state.selectedCells.clear();
-  const rows = renderable.getRowsInRegion(region as Region);
+  const cellIds: string[] = [];
+  const rows = snapshot.getRowsInRegion(region as Region);
   for (const r of rows) {
     if (r.rowIndex < minRow || r.rowIndex > maxRow) continue;
-    for (const [colIdx, cell] of r.cells) {
+    for (const [colIdx, c] of r.cells) {
       if (colIdx >= minCol && colIdx <= maxCol) {
-        state.selectedCells.add(cell.cellID);
+        cellIds.push(c.cellID);
       }
     }
   }
+  table.selectCells(cellIds);
 }
 
 /**
  * Build a merge Rect from the currently selected cells.
- * Returns null if selection is invalid for merge (< 2 cells, not a rectangle, or spans regions).
+ * Returns null if selection is invalid for merge.
  */
 export function buildMergeRect(
-  renderable: RenderableTableInstance,
+  table: Table,
+  snapshot: RenderableTableInstance,
 ): Rect | null {
-  const selected = state.selectedCells;
+  const uiState = table.getUIState();
+  const selected = uiState.selectedCells;
   if (selected.size < 2) return null;
 
   let minRow = Infinity;
@@ -71,14 +73,14 @@ export function buildMergeRect(
   let firstCellId: string | undefined;
 
   for (const cellId of selected) {
-    const cell = renderable.getCellByID(cellId);
+    const cell = snapshot.getCellByID(cellId);
     if (!cell) return null;
 
     if (!primaryRegion) {
       primaryRegion = cell.inRegion;
       firstCellId = cellId;
     } else if (cell.inRegion !== primaryRegion) {
-      return null; // Can't merge across regions
+      return null;
     }
 
     minRow = Math.min(minRow, cell.layout.row);
@@ -89,7 +91,6 @@ export function buildMergeRect(
 
   if (!firstCellId || !primaryRegion) return null;
 
-  // Verify the selection forms a complete rectangle
   const expectedCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
   if (selected.size !== expectedCount) return null;
 
@@ -101,12 +102,4 @@ export function buildMergeRect(
     endCol: maxCol,
     primaryRegion,
   };
-}
-
-/**
- * Clear all cell selection.
- */
-export function clearSelection(): void {
-  state.selectedCells.clear();
-  state.selectionAnchor = null;
 }

@@ -2,17 +2,17 @@
  * Custom propPanel widget functions for the dynamic table plugin.
  *
  * Each widget:
- * 1. Parses activeSchema.content → TableExportData
+ * 1. Gets Table from cache
  * 2. Reads current values from parsed data
  * 3. Renders DOM inputs into rootElement
- * 4. On change: instanceManager.update() → changeSchemas([{ key: 'content', value, schemaId }])
+ * 4. On change: table.method() → commitTable() → changeSchemas()
  */
 
 import type { PropPanelWidgetProps, SchemaForUI } from '@pdfme/common';
 import { getFallbackFontName, DEFAULT_FONT_NAME } from '@pdfme/common';
 import type { DynamicTableSchema } from '../types.js';
 import type { TableExportData } from '../engine/index.js';
-import { instanceManager } from '../instanceManager.js';
+import { getTable, commitTable } from '../instanceManager.js';
 import { showToast } from './toast.js';
 
 type WidgetSchema = SchemaForUI & DynamicTableSchema;
@@ -25,17 +25,15 @@ function parseContent(schema: WidgetSchema): TableExportData {
   return JSON.parse(schema.content || '{}') as TableExportData;
 }
 
-function commitChange(
-  props: PropPanelWidgetProps,
-  mutator: (parsed: TableExportData) => void,
-): void {
+/** Get the cached Table for the active schema and return a commit function */
+function getTableAndCommit(props: PropPanelWidgetProps) {
   const schema = props.activeSchema as WidgetSchema;
-  const newValue = instanceManager.update(schema.name, (table) => {
-    // The mutator receives parsed data but we use the table API
-    // This is a placeholder — actual widgets call table methods directly
-    mutator({} as TableExportData);
-  });
-  props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+  const table = getTable(schema.name, schema.content || '{}');
+  const commit = () => {
+    const json = commitTable(schema.name, table);
+    props.changeSchemas([{ key: 'content', value: json, schemaId: schema.id }]);
+  };
+  return { table, commit, schema };
 }
 
 function createLabel(text: string): HTMLLabelElement {
@@ -136,11 +134,10 @@ export function headerVisibilityWidget(props: PropPanelWidgetProps): void {
   rootElement.style.width = '100%';
 
   const toggle = (key: 'theader' | 'lheader' | 'rheader', value: boolean) => {
-    const newValue = instanceManager.update(schema.name, (table) => {
-      const current = table.getSettings().headerVisibility ?? { theader: true, lheader: false, rheader: false };
-      table.updateSettings({ headerVisibility: { ...current, [key]: value } });
-    });
-    props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+    const { table, commit } = getTableAndCommit(props);
+    const current = table.getSettings().headerVisibility ?? { theader: true, lheader: false, rheader: false };
+    table.updateSettings({ headerVisibility: { ...current, [key]: value } });
+    commit();
   };
 
   rootElement.appendChild(createCheckbox('Top Header', vis.theader !== false, (v) => toggle('theader', v)));
@@ -187,12 +184,10 @@ export function constraintsWidget(props: PropPanelWidgetProps): void {
   };
 
   const applyUpdate = (key: string, value: number | undefined) => {
-    let error: string | null = null;
-    const newValue = instanceManager.update(schema.name, (table) => {
-      error = table.updateSettings({ [key]: value });
-    });
-
-    const updatedSettings = (JSON.parse(newValue) as TableExportData).settings ?? {};
+    const { table, commit } = getTableAndCommit(props);
+    const error = table.updateSettings({ [key]: value });
+    const json = commitTable(schema.name, table);
+    const updatedSettings = (JSON.parse(json) as TableExportData).settings ?? {};
 
     if (error) {
       showToast(error);
@@ -205,7 +200,7 @@ export function constraintsWidget(props: PropPanelWidgetProps): void {
       return;
     }
 
-    props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+    props.changeSchemas([{ key: 'content', value: json, schemaId: schema.id }]);
     syncGroup(key, updatedSettings);
   };
 
@@ -284,10 +279,9 @@ export function overflowWidget(props: PropPanelWidgetProps): void {
     ],
     current,
     (v) => {
-      const newValue = instanceManager.update(schema.name, (table) => {
-        table.updateSettings({ overflow: v as any });
-      });
-      props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+      const { table, commit } = getTableAndCommit(props);
+      table.updateSettings({ overflow: v as any });
+      commit();
     },
   ));
 }
@@ -304,10 +298,9 @@ export function tableStyleWidget(props: PropPanelWidgetProps): void {
   rootElement.style.width = '100%';
 
   const update = (patch: Record<string, unknown>) => {
-    const newValue = instanceManager.update(schema.name, (table) => {
-      table.setTableStyle(patch as any);
-    });
-    props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+    const { table, commit } = getTableAndCommit(props);
+    table.setTableStyle(patch as any);
+    commit();
   };
 
   // Border color
@@ -365,11 +358,10 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string):
   rootElement.style.width = '100%';
 
   const update = (patch: Record<string, unknown>) => {
-    const newValue = instanceManager.update(schema.name, (table) => {
-      const current = table.getRegionStyle(region as any) ?? {};
-      table.setRegionStyle(region as any, { ...current, ...patch } as any);
-    });
-    props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+    const { table, commit } = getTableAndCommit(props);
+    const current = table.getRegionStyle(region as any) ?? {};
+    table.setRegionStyle(region as any, { ...current, ...patch } as any);
+    commit();
   };
 
   // Font name

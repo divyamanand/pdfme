@@ -161,6 +161,8 @@ export class RenderableTable {
       cellsById,
       merges,
       evaluationResults,
+      editingCellId: null,
+      selectedCellIds: new Set<string>(),
 
       // Helper methods
       getCellAt(row: number, col: number, region: Region): RenderableCell | undefined {
