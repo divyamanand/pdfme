@@ -53,4 +53,5 @@ export type {
   Rect,
   CellPayload,
   UIState,
+  MergeMode,
 } from './types/common';

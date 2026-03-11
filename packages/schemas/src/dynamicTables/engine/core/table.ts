@@ -23,7 +23,7 @@ import type {
 } from "../renderers/types/renderable-types"
 
 const DEFAULT_TABLE_SETTINGS: TableSettings = {
-    overflow: 'wrap',
+    overflow: 'increase-height',
     footer: { mode: 'last-page' },
     headerVisibility: { theader: true, lheader: true, rheader: true },
     showGridLines: true,
@@ -48,10 +48,11 @@ export class Table implements ITable {
     private _availableHeight: number = Infinity
 
     // Transient UI state (not serialized)
-    private _uiState: { editingCellId: string | null; selectedCells: Set<string>; selectionAnchor: { row: number; col: number; region: string } | null } = {
+    private _uiState: { editingCellId: string | null; selectedCells: Set<string>; selectionAnchor: { row: number; col: number; region: string } | null; mergeMode: 'none' | 'selecting' | 'unmerging' } = {
         editingCellId: null,
         selectedCells: new Set(),
         selectionAnchor: null,
+        mergeMode: 'none',
     }
 
     constructor(
@@ -623,6 +624,7 @@ export class Table implements ITable {
             editingCellId: this._uiState.editingCellId,
             selectedCells: this._uiState.selectedCells,
             selectionAnchor: this._uiState.selectionAnchor,
+            mergeMode: this._uiState.mergeMode,
         }
     }
 
@@ -657,6 +659,24 @@ export class Table implements ITable {
         this._uiState.editingCellId = null
         this._uiState.selectedCells.clear()
         this._uiState.selectionAnchor = null
+        this._uiState.mergeMode = 'none'
+    }
+
+    setMergeMode(mode: 'none' | 'selecting' | 'unmerging'): void {
+        this._uiState.mergeMode = mode
+        if (mode !== 'none') {
+            this._uiState.editingCellId = null
+            this._uiState.selectedCells.clear()
+            this._uiState.selectionAnchor = null
+        }
+    }
+
+    toggleMergeSelection(cellId: string): void {
+        if (this._uiState.selectedCells.has(cellId)) {
+            this._uiState.selectedCells.delete(cellId)
+        } else {
+            this._uiState.selectedCells.add(cellId)
+        }
     }
 
     // --- Render Snapshot ---
@@ -719,6 +739,16 @@ export class Table implements ITable {
                     cellsById.set(cell.cellID, renderableCell)
                     if (rowCellsByRegion[cell.inRegion]) {
                         rowCellsByRegion[cell.inRegion].push(renderableCell)
+                    }
+                }
+            }
+
+            // Apply alternating background color for odd body rows
+            const bodyAltBg = (regionStyles.body as BodyRegionStyle | undefined)?.alternateBackgroundColor
+            if (bodyAltBg && rowCellsByRegion['body'].length > 0 && rowIndexByRegion['body'] % 2 === 1) {
+                for (const rc of rowCellsByRegion['body']) {
+                    if (!this.cellRegistry.getCellById(rc.cellID)?.styleOverrides?.backgroundColor) {
+                        rc.style = { ...rc.style, backgroundColor: bodyAltBg }
                     }
                 }
             }
@@ -840,6 +870,7 @@ export class Table implements ITable {
             evaluationResults,
             editingCellId: uiState.editingCellId,
             selectedCellIds: uiState.selectedCells,
+            mergeMode: uiState.mergeMode,
             getCellAt(row, col, region) { return this.regions[region][row]?.cells.get(col) },
             getCellByID(cellID) { return this.cellsById.get(cellID) },
             getRowsInRegion(region) { return this.regions[region] },

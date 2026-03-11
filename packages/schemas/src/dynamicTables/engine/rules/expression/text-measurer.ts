@@ -4,12 +4,15 @@
  *
  * Font metric approximation:
  *   charHeight = fontSize × 0.353 mm  (based on 72 DPI standard)
- *   charWidth  = charHeight × 0.6     (monospace-ish approximation)
+ *   charWidth  = charHeight × AVG_CHAR_WIDTH_RATIO
  *
  * This allows overflow detection and font size fitting without a renderer.
  */
 
 import type { ICell } from '../../interfaces/core/cell.interface';
+
+/** Average char-width/char-height ratio for proportional fonts. */
+const AVG_CHAR_WIDTH_RATIO = 0.45;
 
 export interface TextMetrics {
   width: number; // mm
@@ -34,7 +37,7 @@ export class TextMeasurer {
   public static measureText(text: string, style: FontStyle): TextMetrics {
     const fontSize = style.fontSize || 12; // default 12pt
     const charHeight = fontSize * 0.353; // mm per pt
-    const charWidth = charHeight * 0.6; // rough monospace approximation
+    const charWidth = charHeight * AVG_CHAR_WIDTH_RATIO;
 
     // Split into lines (newlines)
     const lines = text.split('\n');
@@ -134,7 +137,7 @@ export class TextMeasurer {
 
     const fontSize = style.fontSize || 12;
     const charHeightMm = fontSize * 0.353;
-    const charWidthMm = charHeightMm * 0.6 + (style.characterSpacing ?? 0) * 0.353;
+    const charWidthMm = charHeightMm * AVG_CHAR_WIDTH_RATIO + (style.characterSpacing ?? 0) * 0.353;
     const lineHeightMm = charHeightMm * (style.lineHeight ?? 1);
 
     const charsPerLine = Math.max(1, Math.floor(availableWidth / charWidthMm));
@@ -169,7 +172,7 @@ export class TextMeasurer {
 
     const fontSize = style.fontSize || 12;
     const charHeightMm = fontSize * 0.353;
-    const charWidthMm = charHeightMm * 0.6 + (style.characterSpacing ?? 0) * 0.353;
+    const charWidthMm = charHeightMm * AVG_CHAR_WIDTH_RATIO + (style.characterSpacing ?? 0) * 0.353;
 
     const lines = text.split('\n');
     let maxLen = 0;
@@ -182,7 +185,7 @@ export class TextMeasurer {
 
   public static wrapText(text: string, width: number, fontSize: number): { text: string; height: number } {
     const charHeight = fontSize * 0.353;
-    const charWidth = charHeight * 0.6;
+    const charWidth = charHeight * AVG_CHAR_WIDTH_RATIO;
     const charsPerLine = Math.floor(width / charWidth);
 
     if (charsPerLine <= 0) {

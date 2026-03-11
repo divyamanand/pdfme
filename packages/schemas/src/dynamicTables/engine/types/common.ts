@@ -163,8 +163,11 @@ export interface TableSettings {
 // Transient UI state (not serialized)
 // ---------------------------------------------------------------------------
 
+export type MergeMode = 'none' | 'selecting' | 'unmerging'
+
 export interface UIState {
     editingCellId: string | null
     selectedCells: ReadonlySet<string>
     selectionAnchor: { row: number; col: number; region: string } | null
+    mergeMode: MergeMode
 }

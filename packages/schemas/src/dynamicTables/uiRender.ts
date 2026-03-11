@@ -16,6 +16,7 @@ import type { Table, Region } from './engine/index.js';
 import type { DynamicTableSchema } from './types.js';
 import { getTable, commitTable } from './instanceManager.js';
 import { toPdfmeCellSchema, getCellDisplayValue } from './helpers/cellSchemaMapper.js';
+import { showToast } from './helpers/toast.js';
 import {
   appendAddRowButton,
   appendRemoveRowButtons,
@@ -77,6 +78,18 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     rootElement.style.border = `${bw}mm solid ${tableStyle.borderColor}`;
   }
 
+  // Merge mode banner
+  if (snapshot.mergeMode !== 'none' && mode === 'designer') {
+    const banner = document.createElement('div');
+    banner.style.cssText =
+      'position:absolute;top:-7mm;left:0;right:0;height:6mm;display:flex;align-items:center;justify-content:center;' +
+      'background:#ff9800;color:#fff;font-size:3mm;font-weight:600;border-radius:1mm;z-index:100;pointer-events:none;';
+    banner.textContent = snapshot.mergeMode === 'selecting'
+      ? 'Click cells to select for merge'
+      : 'Click a merged cell to unmerge';
+    rootElement.appendChild(banner);
+  }
+
   // Render cells region by region
   for (const region of REGION_ORDER) {
     if (region === 'theader' && settings.headerVisibility?.theader === false) continue;
@@ -99,20 +112,39 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
         // Read UI state from snapshot
         const isEditing = snapshot.editingCellId === renderableCell.cellID;
         const isSelected = snapshot.selectedCellIds.has(renderableCell.cellID);
+        const mergeMode = snapshot.mergeMode;
 
         let cellMode: Mode = 'viewer';
-        if (mode === 'form') {
+        if (mergeMode !== 'none') {
+          // In merge modes, all cells are non-editable viewers
+          cellMode = 'viewer';
+        } else if (mode === 'form') {
           cellMode = region === 'body' && isEditing && !schema.readOnly ? 'designer' : 'viewer';
         } else if (mode === 'designer') {
           cellMode = isEditing ? 'designer' : 'form';
         }
 
-        if (isSelected && mode === 'designer') {
+        // Merge mode highlighting
+        if (mergeMode === 'selecting' && isSelected) {
+          cellDiv.style.boxShadow = 'inset 0 0 0 2px #ff9800';
+          cellDiv.style.background = 'rgba(255, 152, 0, 0.12)';
+        } else if (mergeMode === 'unmerging') {
+          // Highlight any cell that belongs to a merge
+          if (renderableCell.mergeRect) {
+            cellDiv.style.boxShadow = 'inset 0 0 0 2px #f44336';
+            cellDiv.style.cursor = 'pointer';
+          }
+        } else if (isSelected && mode === 'designer') {
           cellDiv.style.boxShadow = 'inset 0 0 0 2px #2196f3';
         }
 
-        const isEditable = (mode === 'form' && region === 'body' && !schema.readOnly) || mode === 'designer';
-        cellDiv.style.cursor = isEditable ? 'text' : 'default';
+        const isEditable = mergeMode === 'none'
+          && ((mode === 'form' && region === 'body' && !schema.readOnly) || mode === 'designer');
+        if (mergeMode !== 'none') {
+          cellDiv.style.cursor = 'pointer';
+        } else {
+          cellDiv.style.cursor = isEditable ? 'text' : 'default';
+        }
 
         const cellSchema = toPdfmeCellSchema(renderableCell, 0, 0);
         const displayValue = getCellDisplayValue(renderableCell);
@@ -141,6 +173,26 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
           if (mode === 'viewer') return;
           if (mode === 'form' && region !== 'body') return;
           if (mode === 'form' && schema.readOnly) return;
+
+          // --- Merge mode: selecting cells ---
+          if (mergeMode === 'selecting' && mode === 'designer') {
+            table.toggleMergeSelection(cellId);
+            void uiRender(arg);
+            return;
+          }
+
+          // --- Unmerge mode: click a merged cell to unmerge it ---
+          if (mergeMode === 'unmerging' && mode === 'designer') {
+            if (renderableCell.mergeRect) {
+              table.unmergeCells(renderableCell.mergeRect.cellId);
+              table.setMergeMode('none');
+              if (onChange) commit(table, schema.name, onChange);
+            } else {
+              showToast('Click on a cell that belongs to a merge');
+            }
+            void uiRender(arg);
+            return;
+          }
 
           if (mode === 'designer') {
             handleCellClick(table, cellId, rowIdx, colIdx, region, e.shiftKey, snapshot);
