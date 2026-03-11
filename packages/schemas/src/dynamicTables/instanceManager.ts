@@ -32,11 +32,3 @@ export function commitTable(key: string, table: Table): string {
   cache.set(key, { table, value: json });
   return json;
 }
-
-export function invalidateTable(key: string): void {
-  cache.delete(key);
-}
-
-export function clearTableCache(): void {
-  cache.clear();
-}
