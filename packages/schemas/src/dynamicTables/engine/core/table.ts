@@ -75,6 +75,8 @@ export class Table implements ITable {
     private rebuildAndEvaluate(): void {
         this.ensureMinRows()
         this.ensureMaxRows()
+        this.ensureMinCols()
+        this.ensureMaxCols()
         this.layoutEngine.rebuild()
         this.applyOverflowConstraints()
         this.ruleEngine?.evaluateAll()
@@ -138,9 +140,14 @@ export class Table implements ITable {
         return { ...this.settings }
     }
 
-    updateSettings(patch: Partial<TableSettings>): void {
+    updateSettings(patch: Partial<TableSettings>): string | null {
+        const merged = { ...this.settings, ...patch }
+        const error = this.validateConstraints(patch, merged)
+        if (error) return error
+
         const overflowChanged = patch.overflow !== undefined && patch.overflow !== this.settings.overflow
-        this.settings = { ...this.settings, ...patch }
+        this.settings = merged
+
         if (patch.defaultCellWidth !== undefined) {
             this.layoutEngine.setDefaultCellWidth(patch.defaultCellWidth)
         }
@@ -151,6 +158,34 @@ export class Table implements ITable {
             this.resetDimensionsToDefaults()
         }
         this.rebuildAndEvaluate()
+        return null
+    }
+
+    private validateConstraints(
+        patch: Partial<TableSettings>,
+        merged: TableSettings,
+    ): string | null {
+        // Row constraints
+        const { minRows, maxRows } = merged
+        if (minRows !== undefined && maxRows !== undefined && minRows > maxRows) {
+            if (patch.minRows !== undefined) {
+                return `Min Rows (${minRows}) cannot exceed Max Rows (${maxRows})`
+            }
+            if (patch.maxRows !== undefined) {
+                return `Max Rows (${maxRows}) cannot be less than Min Rows (${minRows})`
+            }
+        }
+        // Col constraints
+        const { minCols, maxCols } = merged
+        if (minCols !== undefined && maxCols !== undefined && minCols > maxCols) {
+            if (patch.minCols !== undefined) {
+                return `Min Cols (${minCols}) cannot exceed Max Cols (${maxCols})`
+            }
+            if (patch.maxCols !== undefined) {
+                return `Max Cols (${maxCols}) cannot be less than Min Cols (${minCols})`
+            }
+        }
+        return null
     }
 
     private resetDimensionsToDefaults(): void {
@@ -335,9 +370,10 @@ export class Table implements ITable {
         }
     }
 
-    insertBodyCol(colIndex: number, data?: (string | number)[]): void {
-        if (this.settings.maxCols !== undefined &&
-            this.structureStore.getBody()[0]?.length >= this.settings.maxCols) return
+    insertBodyCol(colIndex: number, data?: (string | number)[]): 'added' | 'max-reached' {
+        const effectiveMax = this.getEffectiveMaxCols()
+        if (effectiveMax !== undefined &&
+            (this.structureStore.getBody()[0]?.length ?? 0) >= effectiveMax) return 'max-reached'
 
         const numRows = this.structureStore.getBody().length
         const cellIds: string[] = []
@@ -347,16 +383,61 @@ export class Table implements ITable {
         this.structureStore.insertBodyCol(colIndex, cellIds)
         this.layoutEngine.insertColumnWidth(colIndex, this.layoutEngine.getDefaultCellWidth())
         this.rebuildAndEvaluate()
+        return 'added'
     }
 
-    removeBodyCol(colIndex: number): void {
+    removeBodyCol(colIndex: number): 'removed' | 'cleared' {
         if (this.settings.minCols !== undefined &&
-            this.structureStore.getBody()[0]?.length <= this.settings.minCols) return
+            (this.structureStore.getBody()[0]?.length ?? 0) <= this.settings.minCols) {
+            // Clear column cells instead of removing
+            const body = this.structureStore.getBody()
+            for (const row of body) {
+                if (colIndex < row.length) {
+                    this.cellRegistry.updateCell(row[colIndex], { rawValue: "", computedValue: undefined })
+                }
+            }
+            this.rebuildAndEvaluate()
+            return 'cleared'
+        }
 
         const removedIds = this.structureStore.removeBodyCol(colIndex)
         for (const id of removedIds) this.cellRegistry.deleteCell(id)
         this.layoutEngine.removeColumnWidth(colIndex)
         this.rebuildAndEvaluate()
+        return 'removed'
+    }
+
+    private getEffectiveMaxCols(): number | undefined {
+        const { maxCols, minCols } = this.settings
+        if (maxCols === undefined) return undefined
+        if (minCols === undefined) return maxCols
+        return Math.max(maxCols, minCols)
+    }
+
+    private ensureMinCols(): void {
+        const minCols = this.settings.minCols
+        if (minCols === undefined) return
+        const body = this.structureStore.getBody()
+        const currentCols = body.length > 0 ? body[0].length : 0
+        for (let c = currentCols; c < minCols; c++) {
+            const cellIds: string[] = []
+            for (let r = 0; r < body.length; r++) {
+                cellIds.push(this.cellRegistry.createCell("body", ""))
+            }
+            this.structureStore.insertBodyCol(c, cellIds)
+            this.layoutEngine.insertColumnWidth(c, this.layoutEngine.getDefaultCellWidth())
+        }
+    }
+
+    private ensureMaxCols(): void {
+        const maxCols = this.getEffectiveMaxCols()
+        if (maxCols === undefined) return
+        while ((this.structureStore.getBody()[0]?.length ?? 0) > maxCols) {
+            const lastIdx = this.structureStore.getBody()[0].length - 1
+            const removedIds = this.structureStore.removeBodyCol(lastIdx)
+            for (const id of removedIds) this.cellRegistry.deleteCell(id)
+            this.layoutEngine.removeColumnWidth(lastIdx)
+        }
     }
 
     // --- Cell access ---

@@ -13,6 +13,7 @@ import { getFallbackFontName, DEFAULT_FONT_NAME } from '@pdfme/common';
 import type { DynamicTableSchema } from '../types.js';
 import type { TableExportData } from '../engine/index.js';
 import { instanceManager } from '../instanceManager.js';
+import { showToast } from './toast.js';
 
 type WidgetSchema = SchemaForUI & DynamicTableSchema;
 
@@ -158,28 +159,109 @@ export function constraintsWidget(props: PropPanelWidgetProps): void {
   const { rootElement } = props;
   rootElement.style.width = '100%';
 
-  const update = (key: string, value: number) => {
-    const newValue = instanceManager.update(schema.name, (table) => {
-      table.updateSettings({ [key]: value || undefined });
-    });
-    props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+  // Current body dimensions for initial values
+  const bodyRowCount = parsed.body?.length ?? 0;
+  const bodyColCount = parsed.body?.[0]?.length ?? 0;
+
+  // Track inputs + checkboxes for cross-syncing
+  const fields: Record<string, { input: HTMLInputElement; checkbox: HTMLInputElement }> = {};
+
+  // Only sync enabled (checked) inputs within the same group as the changed key
+  const ROW_KEYS = ['minRows', 'maxRows'];
+  const COL_KEYS = ['minCols', 'maxCols'];
+
+  const syncGroup = (key: string, s: Partial<TableExportData['settings']>) => {
+    const group = ROW_KEYS.includes(key) ? ROW_KEYS : COL_KEYS;
+    for (const k of group) {
+      const f = fields[k];
+      if (!f) continue;
+      const val = s?.[k as keyof typeof s] as number | undefined;
+      if (val !== undefined) {
+        f.input.value = String(val);
+      } else if (f.checkbox.checked) {
+        // Engine cleared it (e.g. validation rejected) — revert checkbox
+        f.input.value = String(val ?? 0);
+      }
+      // Leave disabled inputs untouched
+    }
   };
 
-  const addField = (label: string, key: string, current: number | undefined) => {
+  const applyUpdate = (key: string, value: number | undefined) => {
+    let error: string | null = null;
+    const newValue = instanceManager.update(schema.name, (table) => {
+      error = table.updateSettings({ [key]: value });
+    });
+
+    const updatedSettings = (JSON.parse(newValue) as TableExportData).settings ?? {};
+
+    if (error) {
+      showToast(error);
+      // Revert only the changed input to its pre-error value
+      const f = fields[key];
+      if (f) {
+        const current = updatedSettings[key as keyof typeof updatedSettings] as number | undefined;
+        f.input.value = String(current ?? Number(f.input.value));
+      }
+      return;
+    }
+
+    props.changeSchemas([{ key: 'content', value: newValue, schemaId: schema.id }]);
+    syncGroup(key, updatedSettings);
+  };
+
+  const addConstraintRow = (
+    label: string,
+    key: string,
+    currentValue: number | undefined,
+    defaultValue: number,
+  ) => {
+    const isDefined = currentValue !== undefined;
+
     const row = createRow();
+
+    // Checkbox to enable/disable
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = isDefined;
+    row.appendChild(checkbox);
+
     const lbl = document.createElement('span');
     lbl.textContent = label;
     lbl.style.fontSize = '12px';
-    lbl.style.width = '70px';
+    lbl.style.width = '62px';
     row.appendChild(lbl);
-    row.appendChild(createNumberInput(current ?? 0, 0, 1, (v) => update(key, v)));
+
+    // Number input
+    const numInput = createNumberInput(currentValue ?? defaultValue, 0, 1, (v) => {
+      if (checkbox.checked) applyUpdate(key, v);
+    });
+    numInput.disabled = !isDefined;
+    if (!isDefined) numInput.style.opacity = '0.4';
+    fields[key] = { input: numInput, checkbox };
+    row.appendChild(numInput);
+
+    // Checkbox toggle
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        numInput.disabled = false;
+        numInput.style.opacity = '1';
+        applyUpdate(key, Number(numInput.value));
+      } else {
+        numInput.disabled = true;
+        numInput.style.opacity = '0.4';
+        applyUpdate(key, undefined);
+      }
+    });
+
     rootElement.appendChild(row);
   };
 
-  addField('Min Rows', 'minRows', settings.minRows);
-  addField('Max Rows', 'maxRows', settings.maxRows);
-  addField('Min Cols', 'minCols', settings.minCols);
-  addField('Max Cols', 'maxCols', settings.maxCols);
+  addConstraintRow('Min Rows', 'minRows', settings.minRows, bodyRowCount);
+  addConstraintRow('Max Rows', 'maxRows', settings.maxRows,
+    settings.minRows ?? bodyRowCount);
+  addConstraintRow('Min Cols', 'minCols', settings.minCols, bodyColCount);
+  addConstraintRow('Max Cols', 'maxCols', settings.maxCols,
+    settings.minCols ?? bodyColCount);
 }
 
 /**

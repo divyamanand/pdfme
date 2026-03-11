@@ -14,8 +14,8 @@ export interface ITable {
     buildBody(data: (string | number)[][]): void
     insertBodyRow(rowIndex: number, data?: (string | number)[]): 'added' | 'max-reached'
     removeBodyRow(rowIndex: number): 'removed' | 'cleared'
-    insertBodyCol(colIndex: number, data?: (string | number)[]): void
-    removeBodyCol(colIndex: number): void
+    insertBodyCol(colIndex: number, data?: (string | number)[]): 'added' | 'max-reached'
+    removeBodyCol(colIndex: number): 'removed' | 'cleared'
 
     // Cell access
     getCellById(cellId: string): ICell | undefined
@@ -29,7 +29,7 @@ export interface ITable {
 
     // Settings (logical config only)
     getSettings(): TableSettings
-    updateSettings(settings: Partial<TableSettings>): void
+    updateSettings(settings: Partial<TableSettings>): string | null
 
     // Styles
     getTableStyle(): TableStyle

@@ -64,11 +64,19 @@ export function createActionDispatch(schemaName: string, onChange: OnChangeFn): 
     addColumn: () =>
       dispatch((t) => t.addHeaderCell('theader')),
 
-    removeBodyCol: (colIndex) =>
-      dispatch((t) => t.removeBodyCol(colIndex)),
+    removeBodyCol: (colIndex) => {
+      const status = dispatchWithResult((t) => t.removeBodyCol(colIndex));
+      if (status === 'cleared') {
+        showToast('Minimum columns reached — column cleared instead of removed');
+      }
+    },
 
-    insertBodyCol: (colIndex) =>
-      dispatch((t) => t.insertBodyCol(colIndex)),
+    insertBodyCol: (colIndex) => {
+      const status = dispatchWithResult((t) => t.insertBodyCol(colIndex));
+      if (status === 'max-reached') {
+        showToast('Maximum number of columns reached');
+      }
+    },
 
     setColumnWidth: (colIndex, width) =>
       dispatch((t) => t.setColumnWidth(colIndex, width)),
@@ -82,8 +90,12 @@ export function createActionDispatch(schemaName: string, onChange: OnChangeFn): 
     unmergeCells: (cellId) =>
       dispatch((t) => t.unmergeCells(cellId)),
 
-    updateSettings: (patch) =>
-      dispatch((t) => t.updateSettings(patch)),
+    updateSettings: (patch) => {
+      const error = dispatchWithResult((t) => t.updateSettings(patch));
+      if (error) {
+        showToast(error);
+      }
+    },
 
     setTableStyle: (patch) =>
       dispatch((t) => t.setTableStyle(patch)),
