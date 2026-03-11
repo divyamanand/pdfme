@@ -58,7 +58,7 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
   rootElement.style.position = 'relative';
   rootElement.style.width = '100%';
   rootElement.style.height = '100%';
-  rootElement.style.overflow = 'hidden';
+  rootElement.style.overflow = 'visible';
 
   const { settings, tableStyle } = renderable;
 
@@ -174,11 +174,19 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     resetState();
   }
 
-  // Auto-fit height
+  // Auto-fit bounding box to match table dimensions
   if (onChange) {
+    const tableWidth = renderable.getWidth();
     const tableHeight = renderable.getHeight();
+    const changes: { key: string; value: unknown }[] = [];
+    if (Math.abs(schema.width - tableWidth) > 0.01) {
+      changes.push({ key: 'width', value: tableWidth });
+    }
     if (Math.abs(schema.height - tableHeight) > 0.01) {
-      onChange({ key: 'height', value: tableHeight });
+      changes.push({ key: 'height', value: tableHeight });
+    }
+    if (changes.length > 0) {
+      onChange(changes.length === 1 ? changes[0] : changes);
     }
   }
 }
