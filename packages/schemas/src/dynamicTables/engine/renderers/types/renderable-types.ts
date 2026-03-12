@@ -100,7 +100,7 @@ export interface RenderableTableInstance {
   // Transient UI state
   editingCellId: string | null
   selectedCellIds: ReadonlySet<string>
-  mergeMode: 'none' | 'selecting' | 'unmerging'
+  mergeMode: 'none' | 'selecting' | 'unmerging' | 'styling'
 
   // Helper methods
   getCellAt(row: number, col: number, region: Region): RenderableCell | undefined

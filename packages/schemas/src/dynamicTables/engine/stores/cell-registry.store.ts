@@ -1,6 +1,6 @@
 import { Cell } from "../core";
 import { ICell, ICellRegistry } from "../interfaces";
-import { CellPayload, CellStyle, Region } from "../types";
+import { CellPayload, CellStyle, OverflowMode, Region } from "../types";
 import {v1 as uuid} from "uuid"
 
 /** @deprecated Import from '../styles' instead */
@@ -53,8 +53,8 @@ export class CellRegistry implements ICellRegistry {
         return randomId
     }
 
-    createCellWithId(cellId: string, region: Region, rawValue?: string, style?: Partial<CellStyle>, isDynamic?: boolean, computedValue?: string | number): string {
-        const newCell = new Cell(cellId, region, rawValue ?? "Cell", isDynamic ?? false, style, computedValue)
+    createCellWithId(cellId: string, region: Region, rawValue?: string, style?: Partial<CellStyle>, isDynamic?: boolean, computedValue?: string | number, overflow?: OverflowMode): string {
+        const newCell = new Cell(cellId, region, rawValue ?? "Cell", isDynamic ?? false, style, computedValue, overflow)
         this.cellsById.set(cellId, newCell)
         return cellId
     }
@@ -72,7 +72,7 @@ export class CellRegistry implements ICellRegistry {
     updateCell(cellId: string, payload: CellPayload): void {
         const cell = this.cellsById.get(cellId)
         if (cell) {
-            const {inRegion, rawValue, computedValue, style} = payload
+            const {inRegion, rawValue, computedValue, style, overflow} = payload
 
             if (inRegion) {
                 cell.inRegion = inRegion
@@ -88,6 +88,10 @@ export class CellRegistry implements ICellRegistry {
 
             if (style) {
                 cell.styleOverrides = { ...cell.styleOverrides, ...style }
+            }
+
+            if ('overflow' in payload) {
+                cell.overflow = overflow
             }
         }
     }

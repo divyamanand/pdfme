@@ -11,7 +11,7 @@
 import type { PropPanelWidgetProps, SchemaForUI } from '@pdfme/common';
 import { getFallbackFontName, DEFAULT_FONT_NAME } from '@pdfme/common';
 import type { DynamicTableSchema } from '../types.js';
-import type { TableExportData, SerializedHeaderNode, Region } from '../engine/index.js';
+import type { TableExportData, SerializedHeaderNode, Region, OverflowMode, CellStyle } from '../engine/index.js';
 import { getTable, commitTable } from '../instanceManager.js';
 import { showToast } from './toast.js';
 import { buildMergeRect } from '../uiComponents/cellSelection.js';
@@ -343,7 +343,8 @@ const selectedRegionMap = new Map<string, string>();
 
 /**
  * Unified region style widget with a region selector dropdown.
- * Shows cell style controls for the selected region.
+ * Shows region style controls normally, or cell style controls when "Cell" is selected.
+ * Selecting "Cell" activates styling mode (purple highlights, click-to-select).
  */
 export function regionStyleSelectWidget(props: PropPanelWidgetProps): void {
   const schema = props.activeSchema as WidgetSchema;
@@ -352,35 +353,71 @@ export function regionStyleSelectWidget(props: PropPanelWidgetProps): void {
   const vis = parsed.settings?.headerVisibility ?? { theader: true, lheader: false, rheader: false };
   const hasFooter = !!parsed.settings?.footer;
 
-  // Build list of active regions
+  // Build list of active regions + "Cell" option
   const regions: { label: string; value: string }[] = [];
   if (vis.theader !== false) regions.push({ label: 'Top Header', value: 'theader' });
   if (vis.lheader) regions.push({ label: 'Left Header', value: 'lheader' });
   if (vis.rheader) regions.push({ label: 'Right Header', value: 'rheader' });
   regions.push({ label: 'Body', value: 'body' });
   if (hasFooter) regions.push({ label: 'Footer', value: 'footer' });
+  regions.push({ label: '── Cell ──', value: '_cell' });
 
-  // Default to first available region if stored selection is no longer valid
-  let selectedRegion = selectedRegionMap.get(schemaId) ?? 'body';
-  if (!regions.some(r => r.value === selectedRegion)) selectedRegion = regions[0].value;
+  // If we're in styling mode, force to _cell
+  const getTC = () => getTableAndCommit(props);
+  const { table } = getTC();
+  const currentMode = table.getUIState().mergeMode;
+  let selectedRegion = currentMode === 'styling'
+    ? '_cell'
+    : (selectedRegionMap.get(schemaId) ?? 'body');
+  if (selectedRegion !== '_cell' && !regions.some(r => r.value === selectedRegion)) {
+    selectedRegion = regions[0].value;
+  }
 
   const { rootElement } = props;
   rootElement.style.width = '100%';
 
-  // Region selector
-  rootElement.appendChild(createLabel('Region'));
-  const regionSelect = createSelect(regions, selectedRegion, (v) => {
-    selectedRegionMap.set(schemaId, v);
-    // Re-render the controls for the newly selected region
-    controlsContainer.innerHTML = '';
-    renderRegionStyleControls(props, v, controlsContainer);
-  });
-  rootElement.appendChild(regionSelect);
-
   // Container for style controls
   const controlsContainer = document.createElement('div');
+
+  const refreshCellControls = () => {
+    controlsContainer.innerHTML = '';
+    renderCellStyleControls(props, controlsContainer);
+  };
+
+  const switchTo = (v: string) => {
+    selectedRegionMap.set(schemaId, v);
+    const { table: t } = getTC();
+    if (v === '_cell') {
+      t.setMergeMode('styling');
+      t.onSelectionChange(refreshCellControls);
+    } else {
+      if (t.getUIState().mergeMode === 'styling') {
+        t.setMergeMode('none');
+      }
+      t.onSelectionChange(undefined);
+    }
+    // Re-render the canvas so the banner/highlights match the new mode
+    t.triggerRender();
+    controlsContainer.innerHTML = '';
+    if (v === '_cell') {
+      renderCellStyleControls(props, controlsContainer);
+    } else {
+      renderRegionStyleControls(props, v, controlsContainer);
+    }
+  };
+
+  // Region selector
+  rootElement.appendChild(createLabel('Region'));
+  const regionSelect = createSelect(regions, selectedRegion, switchTo);
+  rootElement.appendChild(regionSelect);
+
   rootElement.appendChild(controlsContainer);
-  renderRegionStyleControls(props, selectedRegion, controlsContainer);
+  if (selectedRegion === '_cell') {
+    table.onSelectionChange(refreshCellControls);
+    renderCellStyleControls(props, controlsContainer);
+  } else {
+    renderRegionStyleControls(props, selectedRegion, controlsContainer);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -503,6 +540,189 @@ function renderRegionStyleControls(props: PropPanelWidgetProps, region: string, 
     altRow.appendChild(createColorInput(style.alternateBackgroundColor ?? '#f5f5f5', (v) => update({ alternateBackgroundColor: v })));
     container.appendChild(altRow);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cell style controls (used when "Cell" is selected in region dropdown)
+// ---------------------------------------------------------------------------
+
+function renderCellStyleControls(props: PropPanelWidgetProps, container: HTMLElement): void {
+  const getTC = () => getTableAndCommit(props);
+  const { table } = getTC();
+  const uiState = table.getUIState();
+  const selectedIds = [...uiState.selectedCells];
+
+  if (selectedIds.length === 0) {
+    const msg = document.createElement('div');
+    Object.assign(msg.style, { fontSize: '12px', color: '#999', padding: '8px 0' });
+    msg.textContent = 'Click cells in the table to select them';
+    container.appendChild(msg);
+    return;
+  }
+
+  // For multi-selection, read the first cell's values as representative
+  const primaryId = selectedIds[0];
+  const primaryCell = table.getCellById(primaryId);
+  if (!primaryCell) return;
+
+  const overrides = primaryCell.styleOverrides;
+  const cellOverflow = primaryCell.overflow;
+  const globalOverflow = table.getSettings().overflow ?? 'wrap';
+
+  const font = props.options.font || { [DEFAULT_FONT_NAME]: { data: '', fallback: true } };
+  const fontNames = Object.keys(font);
+  const fallbackFontName = getFallbackFontName(font);
+
+  // Resolve region style to show inherited values as placeholders
+  const snapshot = table.getRenderSnapshot();
+  const resolvedCell = snapshot.getCellByID(primaryId);
+  const resolved = resolvedCell?.style;
+
+  const updateAll = (patch: Partial<CellStyle>) => {
+    const { table: t, commit } = getTC();
+    for (const id of selectedIds) {
+      t.updateCell(id, { style: patch });
+    }
+    commit();
+  };
+
+  const updateOverflow = (mode: OverflowMode | undefined) => {
+    const { table: t, commit } = getTC();
+    for (const id of selectedIds) {
+      t.updateCell(id, { overflow: mode });
+    }
+    commit();
+  };
+
+  // Title with cell count
+  const title = document.createElement('div');
+  Object.assign(title.style, { fontSize: '12px', fontWeight: '600', marginBottom: '4px' });
+  title.textContent = selectedIds.length === 1
+    ? `Cell: ${primaryCell.rawValue}`
+    : `${selectedIds.length} cells selected`;
+  container.appendChild(title);
+
+  // --- Overflow Mode ---
+  container.appendChild(createLabel('Overflow'));
+  const overflowOptions = [
+    { label: `Inherit (${globalOverflow})`, value: '' },
+    { label: 'Wrap', value: 'wrap' },
+    { label: 'Increase Height', value: 'increase-height' },
+    { label: 'Increase Width', value: 'increase-width' },
+  ];
+  container.appendChild(createSelect(overflowOptions, cellOverflow ?? '', (v) => {
+    updateOverflow(v ? v as OverflowMode : undefined);
+  }));
+
+  // --- Font name ---
+  container.appendChild(createLabel('Font'));
+  container.appendChild(createSelect(
+    [{ label: `Inherit`, value: '' }, ...fontNames.map(n => ({ label: n, value: n }))],
+    overrides.fontName ?? '',
+    (v) => updateAll({ fontName: v || undefined }),
+  ));
+
+  // --- Font size + line height ---
+  const sizeRow = createRow();
+  const sizeLabel = document.createElement('span');
+  sizeLabel.textContent = 'Size';
+  sizeLabel.style.fontSize = '12px';
+  sizeRow.appendChild(sizeLabel);
+  sizeRow.appendChild(createNumberInput(overrides.fontSize ?? resolved?.fontSize ?? 13, 1, 1, (v) => updateAll({ fontSize: v })));
+  const lhLabel = document.createElement('span');
+  lhLabel.textContent = 'LH';
+  lhLabel.style.fontSize = '12px';
+  sizeRow.appendChild(lhLabel);
+  sizeRow.appendChild(createNumberInput(overrides.lineHeight ?? resolved?.lineHeight ?? 1, 0, 0.1, (v) => updateAll({ lineHeight: v })));
+  container.appendChild(sizeRow);
+
+  // --- Bold / Italic ---
+  container.appendChild(createCheckbox('Bold', overrides.bold ?? resolved?.bold ?? false, (v) => updateAll({ bold: v })));
+  container.appendChild(createCheckbox('Italic', overrides.italic ?? resolved?.italic ?? false, (v) => updateAll({ italic: v })));
+
+  // --- Alignment ---
+  const alignRow = createRow();
+  const alignLabel = document.createElement('span');
+  alignLabel.textContent = 'Align';
+  alignLabel.style.fontSize = '12px';
+  alignRow.appendChild(alignLabel);
+  alignRow.appendChild(createSelect(
+    [{ label: 'Left', value: 'left' }, { label: 'Center', value: 'center' }, { label: 'Right', value: 'right' }],
+    overrides.alignment ?? resolved?.alignment ?? 'left',
+    (v) => updateAll({ alignment: v as any }),
+  ));
+  alignRow.appendChild(createSelect(
+    [{ label: 'Top', value: 'top' }, { label: 'Middle', value: 'middle' }, { label: 'Bottom', value: 'bottom' }],
+    overrides.verticalAlignment ?? resolved?.verticalAlignment ?? 'middle',
+    (v) => updateAll({ verticalAlignment: v as any }),
+  ));
+  container.appendChild(alignRow);
+
+  // --- Colors ---
+  const colorRow = createRow();
+  const fcLabel = document.createElement('span');
+  fcLabel.textContent = 'Font';
+  fcLabel.style.fontSize = '12px';
+  colorRow.appendChild(fcLabel);
+  colorRow.appendChild(createColorInput(overrides.fontColor ?? resolved?.fontColor ?? '#000000', (v) => updateAll({ fontColor: v })));
+  const bgLabel = document.createElement('span');
+  bgLabel.textContent = 'BG';
+  bgLabel.style.fontSize = '12px';
+  colorRow.appendChild(bgLabel);
+  colorRow.appendChild(createColorInput(overrides.backgroundColor ?? resolved?.backgroundColor ?? '#ffffff', (v) => updateAll({ backgroundColor: v })));
+  container.appendChild(colorRow);
+
+  // --- Border color + width ---
+  const borderRow = createRow();
+  const bcLabel = document.createElement('span');
+  bcLabel.textContent = 'Border';
+  bcLabel.style.fontSize = '12px';
+  borderRow.appendChild(bcLabel);
+  borderRow.appendChild(createColorInput(overrides.borderColor ?? resolved?.borderColor ?? '#888888', (v) => updateAll({ borderColor: v })));
+  const bwVal = overrides.borderWidth?.top ?? resolved?.borderWidth?.top ?? 0.1;
+  borderRow.appendChild(createNumberInput(bwVal, 0, 0.1, (v) => {
+    updateAll({ borderWidth: { top: v, right: v, bottom: v, left: v } });
+  }));
+  container.appendChild(borderRow);
+
+  // --- Padding ---
+  container.appendChild(createLabel('Padding'));
+  const padRow = createRow();
+  const padLabels = ['T', 'R', 'B', 'L'];
+  const padKeys = ['top', 'right', 'bottom', 'left'] as const;
+  const currentPad = overrides.padding ?? resolved?.padding ?? { top: 5, right: 5, bottom: 5, left: 5 };
+  for (let i = 0; i < 4; i++) {
+    const l = document.createElement('span');
+    l.textContent = padLabels[i];
+    l.style.fontSize = '11px';
+    padRow.appendChild(l);
+    const key = padKeys[i];
+    padRow.appendChild(createNumberInput(currentPad[key] ?? 5, 0, 1, (v) => {
+      const { table: t } = getTC();
+      const cell = t.getCellById(primaryId);
+      const existingPad = cell?.styleOverrides.padding ?? { top: 5, right: 5, bottom: 5, left: 5 };
+      updateAll({ padding: { ...existingPad, [key]: v } });
+    }));
+  }
+  container.appendChild(padRow);
+
+  // --- Reset to region defaults ---
+  const resetBtn = document.createElement('button');
+  resetBtn.textContent = 'Reset to Region Defaults';
+  Object.assign(resetBtn.style, {
+    marginTop: '8px', width: '100%', padding: '6px 12px',
+    border: '1px solid #ccc', borderRadius: '4px',
+    background: '#fafafa', cursor: 'pointer', fontSize: '12px',
+  });
+  resetBtn.addEventListener('click', () => {
+    const { table: t, commit } = getTC();
+    for (const id of selectedIds) {
+      t.clearCellStyleOverrides(id);
+      t.updateCell(id, { overflow: undefined });
+    }
+    commit();
+  });
+  container.appendChild(resetBtn);
 }
 
 // ---------------------------------------------------------------------------
@@ -846,6 +1066,7 @@ export function structureWidget(props: PropPanelWidgetProps): void {
       btnRow.appendChild(mkBtn('\u2715 Cancel', 'Cancel merge selection', () => {
         const { table, commit } = getTC();
         table.setMergeMode('none');
+        table.triggerRender();
         renderMergeSection();
         commit();
       }));
@@ -860,6 +1081,7 @@ export function structureWidget(props: PropPanelWidgetProps): void {
       btnRow.appendChild(mkBtn('\u2715 Cancel', 'Cancel unmerge', () => {
         const { table, commit } = getTC();
         table.setMergeMode('none');
+        table.triggerRender();
         renderMergeSection();
         commit();
       }));
@@ -869,6 +1091,7 @@ export function structureWidget(props: PropPanelWidgetProps): void {
       btnRow.appendChild(mkBtn('\u229e Merge', 'Select cells on canvas to merge', () => {
         const { table, commit } = getTC();
         table.setMergeMode('selecting');
+        table.triggerRender();
         renderMergeSection();
         commit();
       }));
@@ -877,6 +1100,7 @@ export function structureWidget(props: PropPanelWidgetProps): void {
         btnRow.appendChild(mkBtn('\u229f Unmerge', 'Click a merged cell to unmerge', () => {
           const { table, commit } = getTC();
           table.setMergeMode('unmerging');
+          table.triggerRender();
           renderMergeSection();
           commit();
         }));
@@ -1002,4 +1226,19 @@ function renderHeaderTree(
       renderHeaderTree(container, node.children, region, getTC, node.cellId, depth + 1);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cell Style Widget — edit style/overflow for the selected cell(s)
+// ---------------------------------------------------------------------------
+
+/**
+ * Standalone cell style widget — delegates to renderCellStyleControls.
+ * Kept for potential standalone use; the primary entry point is now
+ * the "Cell" option in regionStyleSelectWidget.
+ */
+export function cellStyleWidget(props: PropPanelWidgetProps): void {
+  const { rootElement } = props;
+  rootElement.style.width = '100%';
+  renderCellStyleControls(props, rootElement);
 }

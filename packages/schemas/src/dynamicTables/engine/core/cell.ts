@@ -1,4 +1,4 @@
-import { CellLayout, Region, CellStyle } from "../types/index";
+import { CellLayout, Region, CellStyle, OverflowMode } from "../types/index";
 import { ICell } from "../interfaces";
 
 export class Cell implements ICell {
@@ -6,6 +6,7 @@ export class Cell implements ICell {
     public inRegion: Region;
     public rawValue: string | number;
     public styleOverrides: Partial<CellStyle>;
+    public overflow?: OverflowMode;
     public isDynamic: boolean;
     public computedValue?: string | number;
 
@@ -18,6 +19,7 @@ export class Cell implements ICell {
         isDynamic: boolean = false,
         styleOverrides: Partial<CellStyle> = {},
         computedValue?: string | number,
+        overflow?: OverflowMode,
     ) {
         this._cellID = cellID;
         this.inRegion = inRegion;
@@ -25,6 +27,7 @@ export class Cell implements ICell {
         this.isDynamic = isDynamic;
         this.styleOverrides = styleOverrides;
         this.computedValue = computedValue;
+        this.overflow = overflow;
     }
 
     public get cellID(): string {

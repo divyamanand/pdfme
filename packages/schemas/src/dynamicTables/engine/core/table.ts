@@ -48,7 +48,9 @@ export class Table implements ITable {
     private _availableHeight: number = Infinity
 
     // Transient UI state (not serialized)
-    private _uiState: { editingCellId: string | null; selectedCells: Set<string>; selectionAnchor: { row: number; col: number; region: string } | null; mergeMode: 'none' | 'selecting' | 'unmerging' } = {
+    private _onSelectionChange?: () => void
+    private _requestRender?: () => void
+    private _uiState: { editingCellId: string | null; selectedCells: Set<string>; selectionAnchor: { row: number; col: number; region: string } | null; mergeMode: 'none' | 'selecting' | 'unmerging' | 'styling' } = {
         editingCellId: null,
         selectedCells: new Set(),
         selectionAnchor: null,
@@ -113,11 +115,7 @@ export class Table implements ITable {
     private applyOverflowConstraints(): void {
         const mode = this.settings.overflow ?? 'wrap'
         this._overflowStylePatches.clear()
-        if (mode === 'wrap') {
-            this.overflowEngine.applyWrap(this._regionStyles, this._overflowStylePatches)
-        } else {
-            this.overflowEngine.apply(mode, this._regionStyles)
-        }
+        this.overflowEngine.applyAll(mode, this._regionStyles, this._overflowStylePatches)
     }
 
     private applyRuleResults(): void {
@@ -553,6 +551,25 @@ export class Table implements ITable {
         }
     }
 
+    /**
+     * Clear specific style override keys on a cell, reverting them to the region/default cascade.
+     * Pass key names to clear, or no keys to clear all overrides.
+     */
+    clearCellStyleOverrides(cellId: string, ...keys: (keyof CellStyle)[]): void {
+        const cell = this.cellRegistry.getCellById(cellId)
+        if (!cell) return
+        if (keys.length === 0) {
+            cell.styleOverrides = {}
+        } else {
+            const overrides = { ...cell.styleOverrides }
+            for (const key of keys) {
+                delete overrides[key]
+            }
+            cell.styleOverrides = overrides
+        }
+        this.applyOverflowConstraints()
+    }
+
     // --- Merge ---
 
     mergeCells(rect: Rect): void {
@@ -676,7 +693,7 @@ export class Table implements ITable {
         this._uiState.mergeMode = 'none'
     }
 
-    setMergeMode(mode: 'none' | 'selecting' | 'unmerging'): void {
+    setMergeMode(mode: 'none' | 'selecting' | 'unmerging' | 'styling'): void {
         this._uiState.mergeMode = mode
         if (mode !== 'none') {
             this._uiState.editingCellId = null
@@ -685,12 +702,27 @@ export class Table implements ITable {
         }
     }
 
+    onSelectionChange(cb: (() => void) | undefined): void {
+        this._onSelectionChange = cb
+    }
+
+    /** Store a callback that re-renders the canvas (called from uiRender). */
+    requestRender(cb: (() => void) | undefined): void {
+        this._requestRender = cb
+    }
+
+    /** Ask the canvas to re-render (e.g. after a mode change from the propPanel). */
+    triggerRender(): void {
+        this._requestRender?.()
+    }
+
     toggleMergeSelection(cellId: string): void {
         if (this._uiState.selectedCells.has(cellId)) {
             this._uiState.selectedCells.delete(cellId)
         } else {
             this._uiState.selectedCells.add(cellId)
         }
+        this._onSelectionChange?.()
     }
 
     // --- Render Snapshot ---
@@ -723,7 +755,8 @@ export class Table implements ITable {
 
             const regionStyle = regionStyles[cell.inRegion]
             const overflowPatch = this.getOverflowStylePatch(cell.cellID)
-            const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides, overflowPatch)
+            const rulePatches = evalResult?.stylePatches?.map(p => p.style) ?? []
+            const resolvedStyle = resolveStyle(regionStyle, cell.styleOverrides, overflowPatch, ...rulePatches)
 
             return {
                 cellID: cell.cellID,
@@ -999,6 +1032,7 @@ export class Table implements ITable {
                     cellId: cell.cellID,
                     rawValue: cell.rawValue,
                     style: { ...cell.styleOverrides },
+                    overflow: cell.overflow,
                     isDynamic: cell.isDynamic,
                     computedValue: cell.computedValue,
                 }
@@ -1032,6 +1066,7 @@ export class Table implements ITable {
             cellId: cell.cellID,
             rawValue: cell.rawValue,
             style: { ...cell.styleOverrides },
+            overflow: cell.overflow,
             isDynamic: cell.isDynamic,
             computedValue: cell.computedValue,
             children: children.map(childId => this.serializeHeaderNode(childId)),
@@ -1071,6 +1106,7 @@ export class Table implements ITable {
                     cellData.style,
                     cellData.isDynamic,
                     cellData.computedValue,
+                    cellData.overflow,
                 )
                 cellIds.push(cellData.cellId)
             }
@@ -1162,6 +1198,7 @@ export class Table implements ITable {
             node.style,
             node.isDynamic,
             node.computedValue,
+            node.overflow,
         )
 
         if (parentId) {

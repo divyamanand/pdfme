@@ -1,4 +1,4 @@
-import type { CellStyle, Rect, Region, TableSettings, TableStyle, RegionStyleMap } from '../../types'
+import type { CellStyle, OverflowMode, Rect, Region, TableSettings, TableStyle, RegionStyleMap } from '../../types'
 import type { RulePayload } from '../../rules/types/rule.types'
 
 /**
@@ -9,6 +9,7 @@ export interface SerializedHeaderNode {
   cellId: string
   rawValue: string | number
   style: Partial<CellStyle>
+  overflow?: OverflowMode
   isDynamic: boolean
   computedValue?: string | number
   children: SerializedHeaderNode[]
@@ -21,6 +22,7 @@ export interface SerializedBodyCell {
   cellId: string
   rawValue: string | number
   style: Partial<CellStyle>
+  overflow?: OverflowMode
   isDynamic: boolean
   computedValue?: string | number
 }

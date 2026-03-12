@@ -130,6 +130,7 @@ export type CellPayload = {
     inRegion?: Region;
     rawValue?: string | number;
     style?: Partial<CellStyle>;
+    overflow?: OverflowMode;
     computedValue?: string | number;
 }
 
@@ -163,7 +164,7 @@ export interface TableSettings {
 // Transient UI state (not serialized)
 // ---------------------------------------------------------------------------
 
-export type MergeMode = 'none' | 'selecting' | 'unmerging'
+export type MergeMode = 'none' | 'selecting' | 'unmerging' | 'styling'
 
 export interface UIState {
     editingCellId: string | null

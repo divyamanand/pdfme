@@ -30,21 +30,21 @@ export class OverflowEngine {
         private layoutEngine: ILayoutEngine,
     ) {}
 
-    apply(mode: OverflowMode, regionStyles: RegionStyleMap): void {
-        if (mode === 'wrap') return
-        if (mode === 'increase-height') {
-            this.applyIncreaseHeight(regionStyles)
-        } else if (mode === 'increase-width') {
-            this.applyIncreaseWidth(regionStyles)
-        }
-    }
-
     /**
-     * Wrap mode: shrink font size to fit text inside cell.
-     * If text doesn't fit even at fontSize=1, it will be clipped by the renderer.
-     * Writes adjusted font sizes into the provided patches map (not into cell.styleOverrides).
+     * Run all overflow modes. Each cell uses its own overflow mode if set,
+     * otherwise falls back to the provided global mode.
+     * We must run all three strategies in a single pass over cells.
      */
-    applyWrap(regionStyles: RegionStyleMap, patches: Map<string, Partial<CellStyle>>): void {
+    applyAll(
+        globalMode: OverflowMode,
+        regionStyles: RegionStyleMap,
+        patches: Map<string, Partial<CellStyle>>,
+    ): void {
+        // Collect per-mode cell lists
+        const wrapCells: ICell[] = []
+        const increaseHeightRows: Map<number, { cell: ICell; style: CellStyle }[]> = new Map()
+        const increaseWidthCols: Map<number, { cell: ICell; style: CellStyle }[]> = new Map()
+
         this.walkAllCells((cell) => {
             const layout = cell.layout
             if (!layout || layout.rowSpan === 0 || layout.colSpan === 0) return
@@ -52,44 +52,92 @@ export class OverflowEngine {
             const text = String(cell.computedValue ?? cell.rawValue ?? '')
             if (!text) return
 
+            const mode = cell.overflow ?? globalMode
+
+            const style = resolveStyle(
+                regionStyles[cell.inRegion as keyof RegionStyleMap],
+                cell.styleOverrides,
+            )
+
+            if (mode === 'wrap') {
+                wrapCells.push(cell)
+            } else if (mode === 'increase-height') {
+                for (let r = layout.row; r < layout.row + layout.rowSpan; r++) {
+                    if (!increaseHeightRows.has(r)) increaseHeightRows.set(r, [])
+                    increaseHeightRows.get(r)!.push({ cell, style })
+                }
+            } else if (mode === 'increase-width') {
+                for (let c = layout.col; c < layout.col + layout.colSpan; c++) {
+                    if (!increaseWidthCols.has(c)) increaseWidthCols.set(c, [])
+                    increaseWidthCols.get(c)!.push({ cell, style })
+                }
+            }
+        })
+
+        // 1. Wrap — shrink font size
+        for (const cell of wrapCells) {
+            const layout = cell.layout!
+            const text = String(cell.computedValue ?? cell.rawValue ?? '')
             const style = resolveStyle(
                 regionStyles[cell.inRegion as keyof RegionStyleMap],
                 cell.styleOverrides,
             )
             const availWidth = layout.width - style.padding.left - style.padding.right
             const availHeight = layout.height - style.padding.top - style.padding.bottom
-            if (availWidth <= 0 || availHeight <= 0) return
+            if (availWidth <= 0 || availHeight <= 0) continue
 
-            // Check if text fits at current font size (with wrapping)
             const requiredHeight = TextMeasurer.measureRequiredHeight(text, availWidth, style)
-            if (requiredHeight <= availHeight) return
+            if (requiredHeight <= availHeight) continue
 
-            // Text overflows — find a smaller font size that fits
             const fittingSize = TextMeasurer.findFittingFontSize(
                 text,
                 { fontSize: style.fontSize },
                 availWidth,
                 availHeight,
-                1, // minimum font size before clipping
+                1,
             )
-
             if (fittingSize < style.fontSize) {
                 patches.set(cell.cellID, { fontSize: fittingSize })
             }
-        })
+        }
+
+        // 2. Increase height
+        if (increaseHeightRows.size > 0) {
+            this.applyIncreaseHeightForCells(regionStyles, increaseHeightRows)
+        }
+
+        // 3. Increase width
+        if (increaseWidthCols.size > 0) {
+            this.applyIncreaseWidthForCells(regionStyles, increaseWidthCols)
+        }
     }
 
     // ------------------------------------------------------------------
     // increase-height: grow row heights to fit wrapped text
     // ------------------------------------------------------------------
 
-    private applyIncreaseHeight(regionStyles: RegionStyleMap): void {
+    private applyIncreaseHeightForCells(
+        regionStyles: RegionStyleMap,
+        _cellsByRow: Map<number, { cell: ICell; style: CellStyle }[]>,
+    ): void {
         const rowHeights = this.layoutEngine.getRowHeights()
         const required = [...rowHeights]
 
         this.walkAllCells((cell) => {
             const layout = cell.layout
             if (!layout || layout.rowSpan === 0 || layout.colSpan === 0) return
+            // Only process cells whose effective mode is increase-height
+            // We already filtered above, but for merged cells spanning multiple rows
+            // we need to check per-cell
+            const mode = cell.overflow
+            if (mode !== undefined && mode !== 'increase-height') return
+            // If no per-cell mode, this cell will only be here if global mode is increase-height
+            // But we walk all cells, so skip cells not in the collected set
+            let found = false
+            for (let r = layout.row; r < layout.row + layout.rowSpan; r++) {
+                if (_cellsByRow.has(r)) { found = true; break }
+            }
+            if (!found) return
 
             const text = String(cell.computedValue ?? cell.rawValue ?? '')
             if (!text) return
@@ -105,12 +153,10 @@ export class OverflowEngine {
             const neededHeight = textHeight + style.padding.top + style.padding.bottom
 
             if (layout.rowSpan === 1) {
-                // Simple case: single row
                 if (neededHeight > required[layout.row]) {
                     required[layout.row] = neededHeight
                 }
             } else {
-                // Merged cell spanning multiple rows: deficit goes to the last spanned row
                 let spannedSum = 0
                 for (let r = layout.row; r < layout.row + layout.rowSpan; r++) {
                     spannedSum += required[r]
@@ -122,7 +168,6 @@ export class OverflowEngine {
             }
         })
 
-        // Apply changes
         let changed = false
         for (let i = 0; i < required.length; i++) {
             if (required[i] > rowHeights[i]) {
@@ -139,13 +184,23 @@ export class OverflowEngine {
     // increase-width: grow column widths to fit single-line text
     // ------------------------------------------------------------------
 
-    private applyIncreaseWidth(regionStyles: RegionStyleMap): void {
+    private applyIncreaseWidthForCells(
+        regionStyles: RegionStyleMap,
+        _cellsByCol: Map<number, { cell: ICell; style: CellStyle }[]>,
+    ): void {
         const colWidths = this.layoutEngine.getColumnWidths()
         const required = [...colWidths]
 
         this.walkAllCells((cell) => {
             const layout = cell.layout
             if (!layout || layout.rowSpan === 0 || layout.colSpan === 0) return
+            const mode = cell.overflow
+            if (mode !== undefined && mode !== 'increase-width') return
+            let found = false
+            for (let c = layout.col; c < layout.col + layout.colSpan; c++) {
+                if (_cellsByCol.has(c)) { found = true; break }
+            }
+            if (!found) return
 
             const text = String(cell.computedValue ?? cell.rawValue ?? '')
             if (!text) return
@@ -162,7 +217,6 @@ export class OverflowEngine {
                     required[layout.col] = neededWidth
                 }
             } else {
-                // Merged cell spanning multiple cols: deficit goes to the last spanned col
                 let spannedSum = 0
                 for (let c = layout.col; c < layout.col + layout.colSpan; c++) {
                     spannedSum += required[c]

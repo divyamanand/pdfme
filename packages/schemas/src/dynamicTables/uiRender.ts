@@ -61,6 +61,9 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
 
   const snapshot = table.getRenderSnapshot();
 
+  // Register a render callback so the propPanel can trigger a re-render
+  table.requestRender(() => void uiRender(arg));
+
   // Clear previous render
   rootElement.innerHTML = '';
 
@@ -78,15 +81,18 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     rootElement.style.border = `${bw}mm solid ${tableStyle.borderColor}`;
   }
 
-  // Merge mode banner
+  // Merge/styling mode banner
   if (snapshot.mergeMode !== 'none' && mode === 'designer') {
     const banner = document.createElement('div');
+    const isStyleMode = snapshot.mergeMode === 'styling';
     banner.style.cssText =
       'position:absolute;top:-7mm;left:0;right:0;height:6mm;display:flex;align-items:center;justify-content:center;' +
-      'background:#ff9800;color:#fff;font-size:3mm;font-weight:600;border-radius:1mm;z-index:100;pointer-events:none;';
+      `background:${isStyleMode ? '#7c4dff' : '#ff9800'};color:#fff;font-size:3mm;font-weight:600;border-radius:1mm;z-index:100;pointer-events:none;`;
     banner.textContent = snapshot.mergeMode === 'selecting'
       ? 'Click cells to select for merge'
-      : 'Click a merged cell to unmerge';
+      : snapshot.mergeMode === 'unmerging'
+        ? 'Click a merged cell to unmerge'
+        : 'Click cells to select for styling';
     rootElement.appendChild(banner);
   }
 
@@ -125,10 +131,13 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
           cellMode = isEditing ? 'designer' : 'form';
         }
 
-        // Merge mode highlighting
+        // Merge/styling mode highlighting
         if (mergeMode === 'selecting' && isSelected) {
           cellDiv.style.boxShadow = 'inset 0 0 0 2px #ff9800';
           cellDiv.style.background = 'rgba(255, 152, 0, 0.12)';
+        } else if (mergeMode === 'styling' && isSelected) {
+          cellDiv.style.boxShadow = 'inset 0 0 0 2px #7c4dff';
+          cellDiv.style.background = 'rgba(124, 77, 255, 0.12)';
         } else if (mergeMode === 'unmerging') {
           // Highlight any cell that belongs to a merge
           if (renderableCell.mergeRect) {
@@ -175,15 +184,26 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
           if (mode === 'form' && region !== 'body') return;
           if (mode === 'form' && schema.readOnly) return;
 
+          // Read current merge mode fresh (not from closure) so propPanel
+          // mode changes take effect without a full canvas re-render.
+          const currentMergeMode = table.getUIState().mergeMode;
+
           // --- Merge mode: selecting cells ---
-          if (mergeMode === 'selecting' && mode === 'designer') {
+          if (currentMergeMode === 'selecting' && mode === 'designer') {
+            table.toggleMergeSelection(cellId);
+            void uiRender(arg);
+            return;
+          }
+
+          // --- Styling mode: selecting cells for style editing ---
+          if (currentMergeMode === 'styling' && mode === 'designer') {
             table.toggleMergeSelection(cellId);
             void uiRender(arg);
             return;
           }
 
           // --- Unmerge mode: click a merged cell to unmerge it ---
-          if (mergeMode === 'unmerging' && mode === 'designer') {
+          if (currentMergeMode === 'unmerging' && mode === 'designer') {
             if (renderableCell.mergeRect) {
               table.unmergeCells(renderableCell.mergeRect.cellId);
               table.setMergeMode('none');
