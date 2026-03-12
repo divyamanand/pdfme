@@ -41,4 +41,13 @@ export interface ILayoutEngine {
     getTablePosition(): TablePosition
 
     getCompleteGrid(): string[][]
+
+    // Constraint enforcement (called from Table.rebuildAndEvaluate)
+    enforceMinRows(minRows: number): void
+    enforceMaxRows(maxRows: number): void
+    enforceMinCols(minCols: number): void
+    enforceMaxCols(maxCols: number): void
+
+    // Reset all dimension arrays to default values
+    resetDimensionsToDefaults(): void
 }

@@ -192,4 +192,15 @@ export class StructureStore implements IStructureStore {
     reorderHeaderCell(region: Region, fromIndex: number, toIndex: number, withChildren?: boolean): void {
 
     }
+
+    needsBodySliceForRegion(region: Region): boolean {
+        const body = this.getBody()
+        const leafCount = this.getLeafCount(region)
+        if (region === 'theader') {
+            const currentCols = body.length > 0 ? body[0].length : 0
+            return currentCols < leafCount
+        }
+        // lheader / rheader → body rows
+        return body.length < leafCount
+    }
 }

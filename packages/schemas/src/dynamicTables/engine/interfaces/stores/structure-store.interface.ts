@@ -44,4 +44,7 @@ export interface IStructureStore {
     getBodyIndexForHeaderLeafCell(region: Region, cellId: string): number
 
     reorderHeaderCell(region: Region, fromIndex: number, toIndex: number, withChildren?: boolean): void
+
+    /** Check if the body grid needs a new row/col slice to match this region's current leaf count */
+    needsBodySliceForRegion(region: Region): boolean
 }

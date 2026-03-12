@@ -448,4 +448,61 @@ export class LayoutEngine implements ILayoutEngine {
         // Headers can be accessed separately via their root cells and tree traversal
         return body as string[][]
     }
+
+    resetDimensionsToDefaults(): void {
+        const defaultW = this.defaultCellWidth
+        const defaultH = this.defaultCellHeight
+        for (let i = 0; i < this.columnWidths.length; i++) this.columnWidths[i] = defaultW
+        for (let i = 0; i < this.rowHeights.length; i++) this.rowHeights[i] = defaultH
+        for (let i = 0; i < this.footerColumnWidths.length; i++) this.footerColumnWidths[i] = defaultW
+        for (let i = 0; i < this.footerRowHeights.length; i++) this.footerRowHeights[i] = defaultH
+    }
+
+    enforceMinRows(minRows: number): void {
+        const body = this.structureStore.getBody()
+        const numCols = body.length > 0
+            ? body[0].length
+            : this.structureStore.getLeafCount('theader')
+        while (this.structureStore.getBody().length < minRows) {
+            const cellIds: string[] = []
+            for (let i = 0; i < numCols; i++) {
+                cellIds.push(this.cellRegistry.createCell('body', ''))
+            }
+            const idx = this.structureStore.getBody().length
+            this.structureStore.insertBodyRow(idx, cellIds)
+            this.insertRowHeight(idx, this.defaultCellHeight)
+        }
+    }
+
+    enforceMaxRows(maxRows: number): void {
+        while (this.structureStore.getBody().length > maxRows) {
+            const lastIdx = this.structureStore.getBody().length - 1
+            const removedIds = this.structureStore.removeBodyRow(lastIdx)
+            for (const id of removedIds) this.cellRegistry.deleteCell(id)
+            this.removeRowHeight(lastIdx)
+        }
+    }
+
+    enforceMinCols(minCols: number): void {
+        const body = this.structureStore.getBody()
+        const currentCols = body.length > 0 ? body[0].length : 0
+        for (let c = currentCols; c < minCols; c++) {
+            const currentBody = this.structureStore.getBody()
+            const cellIds: string[] = []
+            for (let r = 0; r < currentBody.length; r++) {
+                cellIds.push(this.cellRegistry.createCell('body', ''))
+            }
+            this.structureStore.insertBodyCol(c, cellIds)
+            this.insertColumnWidth(c, this.defaultCellWidth)
+        }
+    }
+
+    enforceMaxCols(maxCols: number): void {
+        while ((this.structureStore.getBody()[0]?.length ?? 0) > maxCols) {
+            const lastIdx = this.structureStore.getBody()[0].length - 1
+            const removedIds = this.structureStore.removeBodyCol(lastIdx)
+            for (const id of removedIds) this.cellRegistry.deleteCell(id)
+            this.removeColumnWidth(lastIdx)
+        }
+    }
 }

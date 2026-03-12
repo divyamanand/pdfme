@@ -24,6 +24,8 @@ import { TextMeasurer } from '../rules/expression/text-measurer'
 const HEADER_REGIONS: readonly Region[] = ['theader', 'lheader', 'rheader', 'footer']
 
 export class OverflowEngine {
+    private patches: Map<string, Partial<CellStyle>> = new Map()
+
     constructor(
         private cellRegistry: ICellRegistry,
         private structureStore: IStructureStore,
@@ -35,11 +37,15 @@ export class OverflowEngine {
      * otherwise falls back to the provided global mode.
      * We must run all three strategies in a single pass over cells.
      */
+    getStylePatch(cellId: string): Partial<CellStyle> | undefined {
+        return this.patches.get(cellId)
+    }
+
     applyAll(
         globalMode: OverflowMode,
         regionStyles: RegionStyleMap,
-        patches: Map<string, Partial<CellStyle>>,
     ): void {
+        this.patches.clear()
         // Collect per-mode cell lists
         const wrapCells: ICell[] = []
         const increaseHeightRows: Map<number, { cell: ICell; style: CellStyle }[]> = new Map()
@@ -97,7 +103,7 @@ export class OverflowEngine {
                 1,
             )
             if (fittingSize < style.fontSize) {
-                patches.set(cell.cellID, { fontSize: fittingSize })
+                this.patches.set(cell.cellID, { fontSize: fittingSize })
             }
         }
 
