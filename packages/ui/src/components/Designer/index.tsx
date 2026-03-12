@@ -278,15 +278,17 @@ const TemplateEditor = ({
   const handleChangePageSize = (w: number, h: number) => {
     if (!isBlankPdf(template.basePdf)) return;
     const newBasePdf = { ...template.basePdf, width: w, height: h };
-    const newTemplate = { ...template, basePdf: newBasePdf };
+    const newTemplate = schemasList2template(schemasList, newBasePdf);
     onChangeTemplate(newTemplate);
+    void updateTemplate(newTemplate);
   };
 
   const handleChangePadding = (padding: [number, number, number, number]) => {
     if (!isBlankPdf(template.basePdf)) return;
     const newBasePdf = { ...template.basePdf, padding };
-    const newTemplate = { ...template, basePdf: newBasePdf };
+    const newTemplate = schemasList2template(schemasList, newBasePdf);
     onChangeTemplate(newTemplate);
+    void updateTemplate(newTemplate);
   };
 
   if (prevTemplate !== template) {
