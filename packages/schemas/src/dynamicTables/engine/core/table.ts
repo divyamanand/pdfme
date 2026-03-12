@@ -308,14 +308,16 @@ export class Table implements ITable {
         if (parentId) {
             const wasLeaf = this.structureStore.isLeafCell(parentId)
             this.structureStore.addChildCell(parentId, region, cellId, index)
-            if (!wasLeaf) {
+            if (!wasLeaf && this.bodyNeedsSliceForRegion(region)) {
                 const newLeafIndex = this.structureStore.getBodyIndexForHeaderLeafCell(region, cellId)
                 this.insertBodySliceForRegion(region, newLeafIndex)
             }
         } else {
-            const leafIndex = this.structureStore.getLeafCount(region)
             this.structureStore.addRootCell(cellId, region)
-            this.insertBodySliceForRegion(region, leafIndex)
+            if (this.bodyNeedsSliceForRegion(region)) {
+                const leafIndex = this.structureStore.getBodyIndexForHeaderLeafCell(region, cellId)
+                this.insertBodySliceForRegion(region, leafIndex)
+            }
         }
 
         this.rebuildAndEvaluate()
@@ -341,6 +343,18 @@ export class Table implements ITable {
     }
 
     // --- Body slice helpers ---
+
+    /** Check if the body grid needs a new row/col to match the region's current leaf count */
+    private bodyNeedsSliceForRegion(region: Region): boolean {
+        const body = this.structureStore.getBody()
+        const leafCount = this.structureStore.getLeafCount(region)
+        if (region === 'theader') {
+            const currentCols = body.length > 0 ? body[0].length : 0
+            return currentCols < leafCount
+        }
+        // lheader / rheader → body rows
+        return body.length < leafCount
+    }
 
     private insertBodySliceForRegion(region: Region, index: number): void {
         if (region === "theader") this.insertBodyCol(index)
