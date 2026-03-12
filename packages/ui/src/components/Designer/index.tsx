@@ -266,14 +266,38 @@ const TemplateEditor = ({
     void updatePage(_schemasList, pageCursor + 1);
   };
 
+  const handleClonePageAfter = () => {
+    const _schemasList = cloneDeep(schemasList);
+    const currentPage = cloneDeep(schemasList[pageCursor] || []);
+    // Give cloned schemas new unique ids
+    const clonedPage = currentPage.map((s) => ({ ...s, id: uuid() }));
+    _schemasList.splice(pageCursor + 1, 0, clonedPage);
+    void updatePage(_schemasList, pageCursor + 1);
+  };
+
+  const handleChangePageSize = (w: number, h: number) => {
+    if (!isBlankPdf(template.basePdf)) return;
+    const newBasePdf = { ...template.basePdf, width: w, height: h };
+    const newTemplate = { ...template, basePdf: newBasePdf };
+    onChangeTemplate(newTemplate);
+  };
+
+  const handleChangePadding = (padding: [number, number, number, number]) => {
+    if (!isBlankPdf(template.basePdf)) return;
+    const newBasePdf = { ...template.basePdf, padding };
+    const newTemplate = { ...template, basePdf: newBasePdf };
+    onChangeTemplate(newTemplate);
+  };
+
   if (prevTemplate !== template) {
     setPrevTemplate(template);
     void updateTemplate(template);
   }
 
   const canvasWidth = size.width - LEFT_SIDEBAR_WIDTH;
+  const hasActiveSchemas = activeElements.length > 0;
   const sizeExcSidebars = {
-    width: sidebarOpen ? canvasWidth - RIGHT_SIDEBAR_WIDTH : canvasWidth,
+    width: sidebarOpen && hasActiveSchemas ? canvasWidth - RIGHT_SIDEBAR_WIDTH : canvasWidth,
     height: size.height,
   };
 
@@ -282,7 +306,13 @@ const TemplateEditor = ({
     return <ErrorScreen size={size} error={error} />;
   }
   const pageManipulation = isBlankPdf(template.basePdf)
-    ? { addPageAfter: handleAddPageAfter, removePage: handleRemovePage }
+    ? {
+        addPageAfter: handleAddPageAfter,
+        removePage: handleRemovePage,
+        clonePageAfter: handleClonePageAfter,
+        onChangePageSize: handleChangePageSize,
+        onChangePadding: handleChangePadding,
+      }
     : {};
 
   return (
@@ -334,6 +364,7 @@ const TemplateEditor = ({
             }}
             zoomLevel={zoomLevel}
             setZoomLevel={setZoomLevel}
+            basePdf={template.basePdf}
             {...pageManipulation}
           />
 

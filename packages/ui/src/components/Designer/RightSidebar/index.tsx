@@ -3,7 +3,6 @@ import { theme, Button } from 'antd';
 import type { SidebarProps } from '../../../types.js';
 import { RIGHT_SIDEBAR_WIDTH, DESIGNER_CLASSNAME } from '../../../constants.js';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-import ListView from './ListView/index.js';
 import DetailView from './DetailView/index.js';
 
 const Sidebar = (props: SidebarProps) => {
@@ -18,6 +17,7 @@ const Sidebar = (props: SidebarProps) => {
   };
 
   const iconProps = { strokeWidth: 1.5, size: 20 };
+  const hasActiveSchemas = getActiveSchemas().length > 0;
 
   return (
     <div
@@ -27,29 +27,31 @@ const Sidebar = (props: SidebarProps) => {
         right: 0,
         zIndex: 1,
         height: '100%',
-        width: sidebarOpen ? RIGHT_SIDEBAR_WIDTH : 0,
+        width: sidebarOpen && hasActiveSchemas ? RIGHT_SIDEBAR_WIDTH : 0,
       }}
     >
-      <Button
-        className={DESIGNER_CLASSNAME + 'sidebar-toggle'}
-        style={{
-          position: 'absolute',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          top: '14px',
-          right: '16px',
-          paddingTop: '2px',
-          zIndex: 100,
-        }}
-        icon={sidebarOpen ? <ArrowRight {...iconProps} /> : <ArrowLeft {...iconProps} />}
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-      />
+      {hasActiveSchemas && (
+        <Button
+          className={DESIGNER_CLASSNAME + 'sidebar-toggle'}
+          style={{
+            position: 'absolute',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            top: '14px',
+            right: '16px',
+            paddingTop: '2px',
+            zIndex: 100,
+          }}
+          icon={sidebarOpen ? <ArrowRight {...iconProps} /> : <ArrowLeft {...iconProps} />}
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+        />
+      )}
       <div
         style={{
           width: RIGHT_SIDEBAR_WIDTH,
           height: '100%',
-          display: sidebarOpen ? 'flex' : 'none',
+          display: sidebarOpen && hasActiveSchemas ? 'flex' : 'none',
           top: 0,
           right: 0,
           position: 'absolute',
@@ -59,9 +61,7 @@ const Sidebar = (props: SidebarProps) => {
           borderLeft: `1px solid ${token.colorSplit}`,
         }}
       >
-        {getActiveSchemas().length === 0 ? (
-          <ListView {...props} />
-        ) : (
+        {hasActiveSchemas && (
           <DetailView {...props} activeSchema={getLastActiveSchema()} />
         )}
       </div>

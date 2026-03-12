@@ -1,22 +1,50 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
-import { cloneDeep, Template, checkTemplate, Lang, isBlankPdf } from "@pdfme/common";
+import { cloneDeep, Template, checkTemplate, isBlankPdf } from "@pdfme/common";
 import { Designer } from "@pdfme/ui";
 import {
   getFontsData,
   getTemplateById,
   getBlankTemplate,
   readFile,
-  handleLoadTemplate,
   generatePDF,
-  downloadJsonFile,
-  translations,
 } from "../helper";
 import { getPlugins } from '../plugins';
 import { NavBar, NavItem } from "../components/NavBar";
-import ExternalButton from "../components/ExternalButton";
 
+// ---------------------------------------------------------------------------
+// Version history helpers (stored per-template in localStorage)
+// ---------------------------------------------------------------------------
+type VersionEntry = { label: string; timestamp: number; template: Template };
+
+function loadVersions(): VersionEntry[] {
+  try {
+    const raw = localStorage.getItem("template-versions");
+    return raw ? (JSON.parse(raw) as VersionEntry[]) : [];
+  } catch { return []; }
+}
+function saveVersions(v: VersionEntry[]) {
+  localStorage.setItem("template-versions", JSON.stringify(v));
+}
+function pushVersion(template: Template): VersionEntry[] {
+  const versions = loadVersions();
+  const entry: VersionEntry = {
+    label: `v${versions.length + 1}`,
+    timestamp: Date.now(),
+    template: cloneDeep(template),
+  };
+  versions.push(entry);
+  saveVersions(versions);
+  return versions;
+}
+
+// ---------------------------------------------------------------------------
+// Page-size presets
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 function DesignerApp() {
   const [searchParams, setSearchParams] = useSearchParams();
   const designerRef = useRef<HTMLDivElement | null>(null);
@@ -24,6 +52,13 @@ function DesignerApp() {
 
   const [editingStaticSchemas, setEditingStaticSchemas] = useState(false);
   const [originalTemplate, setOriginalTemplate] = useState<Template | null>(null);
+  const [viewerMode, setViewerMode] = useState(false);
+  const [versions, setVersions] = useState<VersionEntry[]>(loadVersions());
+
+  // Auto-save: persists on every template change
+  const autoSave = useCallback((template: Template) => {
+    localStorage.setItem("template", JSON.stringify(template));
+  }, []);
 
   const buildDesigner = useCallback(async () => {
     if (!designerRef.current) return;
@@ -53,12 +88,8 @@ function DesignerApp() {
         options: {
           font: getFontsData(),
           lang: 'en',
-          labels: {
-            'signature.clear': "🗑️",
-          },
-          theme: {
-            token: { colorPrimary: "#25c2a0" },
-          },
+          labels: { 'signature.clear': "🗑️" },
+          theme: { token: { colorPrimary: "#25c2a0" } },
           icons: {
             multiVariableText:
               '<svg fill="#000000" width="24px" height="24px" viewBox="0 0 24 24"><path d="M6.643,13.072,17.414,2.3a1.027,1.027,0,0,1,1.452,0L20.7,4.134a1.027,1.027,0,0,1,0,1.452L9.928,16.357,5,18ZM21,20H3a1,1,0,0,0,0,2H21a1,1,0,0,0,0-2Z"/></svg>',
@@ -68,51 +99,42 @@ function DesignerApp() {
         plugins: getPlugins(),
       });
       designer.current.onSaveTemplate(onSaveTemplate);
-
+      designer.current.onChangeTemplate(autoSave);
     } catch (error) {
       localStorage.removeItem("template");
       console.error(error);
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, autoSave]);
 
+  // --- BasePDF ---
   const onChangeBasePDF = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       readFile(e.target.files[0], "dataURL").then(async (basePdf) => {
         if (designer.current) {
-          const newTemplate = cloneDeep(designer.current.getTemplate());
-          newTemplate.basePdf = basePdf;
-          designer.current.updateTemplate(newTemplate);
+          const t = cloneDeep(designer.current.getTemplate());
+          t.basePdf = basePdf;
+          designer.current.updateTemplate(t);
         }
       });
     }
   };
 
-  const onDownloadTemplate = () => {
-    if (designer.current) {
-      downloadJsonFile(designer.current.getTemplate(), "template");
-      toast.success(
-        <div>
-          <p>Can you share the template you created? ❤️</p>
-          <a
-            className="text-blue-500 underline"
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://pdfme.com/docs/template-contribution-guide"
-          >
-            See: Template Contribution Guide
-          </a>
-        </div>
-      );
-    }
+  const onRemoveBasePDF = () => {
+    if (!designer.current) return;
+    const t = cloneDeep(designer.current.getTemplate());
+    t.basePdf = { width: 210, height: 297, padding: [20, 10, 20, 10] };
+    designer.current.updateTemplate(t);
+    toast.info("Base PDF removed — blank page restored");
   };
 
+  // --- Save / Reset ---
   const onSaveTemplate = (template?: Template) => {
     if (designer.current) {
-      localStorage.setItem(
-        "template",
-        JSON.stringify(template || designer.current.getTemplate())
-      );
-      toast.success("Saved on local storage");
+      const t = template || designer.current.getTemplate();
+      localStorage.setItem("template", JSON.stringify(t));
+      const v = pushVersion(t);
+      setVersions(v);
+      toast.success("Saved & version snapshot created");
     }
   };
 
@@ -123,28 +145,29 @@ function DesignerApp() {
     }
   };
 
+  // --- Viewer toggle ---
+  const toggleViewerMode = () => {
+    if (!designer.current) return;
+    const next = !viewerMode;
+    setViewerMode(next);
+    // readOnly on all schemas = viewer behaviour inside the designer shell
+    const t = cloneDeep(designer.current.getTemplate());
+    t.schemas = t.schemas.map(page =>
+      page.map(s => ({ ...s, readOnly: next }))
+    );
+    designer.current.updateTemplate(t);
+  };
+
+  // --- Static schema editing ---
   const toggleEditingStaticSchemas = () => {
     if (!designer.current) return;
-
     if (!editingStaticSchemas) {
       const currentTemplate = cloneDeep(designer.current.getTemplate());
       if (!isBlankPdf(currentTemplate.basePdf)) {
-        toast.error(<div>
-          <p>The current template cannot edit the static schema.</p>
-          <a
-            className="text-blue-500 underline"
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://pdfme.com/docs/headers-and-footers"
-          >
-            See: Headers and Footers
-          </a>
-        </div>);
+        toast.error("Static schema editing requires a blank base PDF");
         return;
       }
-
       setOriginalTemplate(currentTemplate);
-
       const { width, height } = currentTemplate.basePdf;
       const staticSchema = currentTemplate.basePdf.staticSchema || [];
       designer.current.updateTemplate({
@@ -152,152 +175,114 @@ function DesignerApp() {
         schemas: [staticSchema],
         basePdf: { width, height, padding: [0, 0, 0, 0] },
       });
-
       setEditingStaticSchemas(true);
-
     } else {
       const editedTemplate = designer.current.getTemplate();
       if (!originalTemplate) return;
       const merged = cloneDeep(originalTemplate);
-      if (!isBlankPdf(merged.basePdf)) {
-        toast.error("Invalid basePdf format");
-        return;
-      }
-
+      if (!isBlankPdf(merged.basePdf)) { toast.error("Invalid basePdf format"); return; }
       merged.basePdf.staticSchema = editedTemplate.schemas[0];
       designer.current.updateTemplate(merged);
-
       setOriginalTemplate(null);
       setEditingStaticSchemas(false);
     }
   };
 
+  // --- Version restore ---
+  const restoreVersion = (idx: number) => {
+    if (!designer.current) return;
+    const entry = versions[idx];
+    if (!entry) return;
+    designer.current.updateTemplate(cloneDeep(entry.template));
+    localStorage.setItem("template", JSON.stringify(entry.template));
+    toast.info(`Restored ${entry.label}`);
+  };
+
   useEffect(() => {
-    if (designerRef.current) {
-      buildDesigner();
-    }
-    return () => {
-      designer.current?.destroy();
-    };
+    if (designerRef.current) { buildDesigner(); }
+    return () => { designer.current?.destroy(); };
   }, [designerRef, buildDesigner]);
 
+  // Get current basePdf info for UI
+  const currentTemplate = designer.current?.getTemplate();
+  const currentBasePdf = currentTemplate?.basePdf;
+  const isBlank = currentBasePdf ? isBlankPdf(currentBasePdf) : true;
+  const dis = editingStaticSchemas;
+  const btn = (extra = "") =>
+    `px-1.5 py-0.5 border rounded hover:bg-gray-100 text-xs whitespace-nowrap ${dis ? "opacity-50 cursor-not-allowed" : ""} ${extra}`;
+
+  // -----------------------------------------------------------------------
+  // NavBar items — compact inline controls
+  // -----------------------------------------------------------------------
   const navItems: NavItem[] = [
+    // --- Base PDF ---
     {
-      label: "Lang",
+      label: "Base PDF",
       content: (
-        <select
-          disabled={editingStaticSchemas}
-          className={`w-full border rounded px-2 py-1 ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          onChange={(e) => {
-            designer.current?.updateOptions({ lang: e.target.value as Lang });
-          }}
-        >
-          {translations.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
+        <div className="flex items-center gap-1">
+          <input disabled={dis} type="file" accept="application/pdf"
+            className={`text-xs w-28 ${dis ? "opacity-50 cursor-not-allowed" : ""}`}
+            onChange={onChangeBasePDF} />
+          {!isBlank && (
+            <button disabled={dis} className={btn("text-red-600")} onClick={onRemoveBasePDF}>
+              Remove
+            </button>
+          )}
+        </div>
+      ),
+    },
+    // --- Divider ---
+    { label: "", content: <div className="h-5 w-px bg-gray-300" /> },
+    // --- Version History ---
+    {
+      label: "Version",
+      content: (
+        <select className="border rounded px-1 py-0.5 text-xs w-28" value=""
+          onChange={(e) => { const idx = Number(e.target.value); if (!isNaN(idx)) restoreVersion(idx); }}>
+          <option value="" disabled>{versions.length ? `${versions.length} saved` : "None"}</option>
+          {versions.map((v, i) => (
+            <option key={i} value={i}>{v.label} — {new Date(v.timestamp).toLocaleTimeString()}</option>
           ))}
         </select>
       ),
     },
+    // --- Static Schema ---
     {
-      label: "Change BasePDF",
+      label: "Static",
       content: (
-        <input
-          disabled={editingStaticSchemas}
-          type="file"
-          accept="application/pdf"
-          className={`w-full text-sm border rounded ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          onChange={onChangeBasePDF}
-        />
-      ),
-    },
-    {
-      label: "Load Template",
-      content: (
-        <input
-          disabled={editingStaticSchemas}
-          type="file"
-          accept="application/json"
-          className={`w-full text-sm border rounded ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          onChange={(e) => handleLoadTemplate(e, designer.current)}
-        />
-      ),
-    },
-    {
-      label: "Edit static schema",
-      content: (
-        <button
-          className={`px-2 py-1 border rounded hover:bg-gray-100 w-full disabled:opacity-50 disabled:cursor-not-allowed`}
-          onClick={toggleEditingStaticSchemas}
-        >
-          {editingStaticSchemas ? "End editing" : "Start editing"}
+        <button className={btn(editingStaticSchemas ? "bg-yellow-50 border-yellow-400" : "")}
+          onClick={toggleEditingStaticSchemas}>
+          {editingStaticSchemas ? "Done" : "Edit"}
         </button>
       ),
     },
+    // --- Viewer toggle ---
     {
       label: "",
       content: (
-        <div className="flex gap-2">
-          <button
-            id="save-local"
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={() => onSaveTemplate()}
-          >
-            Save Local
-          </button>
-          <button
-            id="reset-template"
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={onResetTemplate}
-          >
-            Reset
-          </button>
-        </div>
+        <button disabled={dis}
+          className={btn(viewerMode ? "bg-blue-100 border-blue-400" : "")}
+          onClick={toggleViewerMode}>
+          {viewerMode ? "Exit Viewer" : "Viewer"}
+        </button>
       ),
     },
+    // --- Divider ---
+    { label: "", content: <div className="h-5 w-px bg-gray-300" /> },
+    // --- Reset + View Sample ---
     {
       label: "",
       content: (
-        <div className="flex gap-2">
-          <button
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            onClick={onDownloadTemplate}
-          >
-            DL Template
-          </button>
-          <button
-            id="generate-pdf"
-            disabled={editingStaticSchemas}
-            className={`px-2 py-1 border rounded hover:bg-gray-100 w-full ${editingStaticSchemas ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+        <div className="flex items-center gap-1">
+          <button disabled={dis} className={btn()} onClick={onResetTemplate}>Reset</button>
+          <button disabled={dis} className={btn("bg-green-50 border-green-400")}
             onClick={async () => {
-              const startTimer = performance.now();
+              const t0 = performance.now();
               await generatePDF(designer.current);
-              const endTimer = performance.now();
-              toast.info(`Generated PDF in ${Math.round(endTimer - startTimer)}ms ⚡️`);
-            }}
-          >
-            Generate PDF
-          </button>
+              toast.info(`Generated in ${Math.round(performance.now() - t0)}ms`);
+            }}>View Sample</button>
         </div>
       ),
-    },
-    {
-      label: "",
-      content: React.createElement(ExternalButton, {
-        href: "https://github.com/pdfme/pdfme/issues/new?template=template_feedback.yml&title=TEMPLATE_NAME",
-        title: "Feedback this template"
-      }),
     },
   ];
 

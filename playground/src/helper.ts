@@ -1,5 +1,5 @@
 import { Template, Font, checkTemplate, getInputFromTemplate, getDefaultFont } from '@pdfme/common';
-import { Form, Viewer, Designer } from '@pdfme/ui';
+import { Designer } from '@pdfme/ui';
 import { generate } from '@pdfme/generator';
 import { getPlugins } from './plugins';
 
@@ -46,68 +46,13 @@ export const readFile = (file: File | null, type: 'text' | 'dataURL' | 'arrayBuf
   });
 };
 
-const getTemplateFromJsonFile = (file: File) => {
-  return readFile(file, 'text').then((jsonStr) => {
-    const template: Template = JSON.parse(jsonStr as string);
-    checkTemplate(template);
-    return template;
-  });
-};
 
-export const downloadJsonFile = (json: unknown, title: string) => {
-  if (typeof window !== 'undefined') {
-    const blob = new Blob([JSON.stringify(json)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${title}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-};
 
-export const handleLoadTemplate = (
-  e: React.ChangeEvent<HTMLInputElement>,
-  currentRef: Designer | Form | Viewer | null
-) => {
-  if (e.target && e.target.files && e.target.files[0]) {
-    getTemplateFromJsonFile(e.target.files[0])
-      .then((t) => {
-        if (!currentRef) return;
-        currentRef.updateTemplate(t);
-      })
-      .catch((e) => {
-        alert(`Invalid template file.
---------------------------
-${e}`);
-      });
-  }
-};
-
-export const translations: { label: string; value: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: 'Chinese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ar', label: 'Arabic' },
-  { value: 'th', label: 'Thai' },
-  { value: 'pl', label: 'Polish' },
-  { value: 'it', label: 'Italian' },
-  { value: 'de', label: 'German' },
-  { value: 'fr', label: 'French' },
-  { value: 'es', label: 'Spanish' },
-];
-
-export const generatePDF = async (currentRef: Designer | Form | Viewer | null) => {
+export const generatePDF = async (currentRef: Designer | null) => {
   if (!currentRef) return;
   const template = currentRef.getTemplate();
   const options = currentRef.getOptions();
-  const inputs =
-    typeof (currentRef as Viewer | Form).getInputs === 'function'
-      ? (currentRef as Viewer | Form).getInputs()
-      : getInputFromTemplate(template);
+  const inputs = getInputFromTemplate(template);
   const font = getFontsData();
 
   try {
