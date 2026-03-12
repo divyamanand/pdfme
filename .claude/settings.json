@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm ls:*)",
+      "Bash(done)",
+      "Bash(find e:/Dev/campx/pdfme -path */node_modules/react/package.json -type f)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Read(//e/Dev/campx/pdfme/**)",
+      "Bash(npm run:*)",
+      "Bash(grep -r waitFor e:/Dev/campx/pdfme/node_modules/@testing-library/react/types/*.d.ts)"
+    ]
+  }
+}

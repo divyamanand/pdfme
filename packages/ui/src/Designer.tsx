@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
+import ReactDOM from 'react-dom/client';
 import {
   cloneDeep,
   Template,
@@ -14,6 +14,7 @@ import DesignerComponent from './components/Designer/index.js';
 import AppContextProvider from './components/AppContextProvider.js';
 
 class Designer extends BaseUIClass {
+  private root?: ReactDOM.Root;
   private onSaveTemplateCallback?: (template: Template) => void;
   private onChangeTemplateCallback?: (template: Template) => void;
   private onPageChangeCallback?: (pageInfo: { currentPage: number; totalPages: number }) => void;
@@ -62,9 +63,21 @@ class Designer extends BaseUIClass {
     return this.template.schemas.length;
   }
 
+  public destroy() {
+    if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
+    if (this.root) {
+      this.root.unmount();
+    }
+    this.resizeObserver.unobserve(this.domContainer);
+    this.domContainer = null;
+  }
+
   protected render() {
     if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
-    ReactDOM.render(
+    if (!this.root) {
+      this.root = ReactDOM.createRoot(this.domContainer);
+    }
+    this.root.render(
       <AppContextProvider
         lang={this.getLang()}
         font={this.getFont()}
@@ -99,7 +112,6 @@ class Designer extends BaseUIClass {
           size={this.size}
         />
       </AppContextProvider>,
-      this.domContainer,
     );
   }
 }

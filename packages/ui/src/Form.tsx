@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
+import ReactDOM from 'react-dom/client';
 import { PreviewProps } from '@pdfme/common';
 import { PreviewUI } from './class.js';
 import { DESTROYED_ERR_MSG } from './constants.js';
@@ -7,6 +7,7 @@ import AppContextProvider from './components/AppContextProvider.js';
 import Preview from './components/Preview.js';
 
 class Form extends PreviewUI {
+  private root?: ReactDOM.Root;
   private onChangeInputCallback?: (arg: { index: number; value: string; name: string }) => void;
   private onPageChangeCallback?: (pageInfo: { currentPage: number; totalPages: number }) => void;
   private pageCursor: number = 0;
@@ -30,6 +31,15 @@ class Form extends PreviewUI {
   public getTotalPages() {
     if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
     return this.template.schemas.length;
+  }
+
+  public destroy() {
+    if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
+    if (this.root) {
+      this.root.unmount();
+    }
+    this.resizeObserver.unobserve(this.domContainer);
+    this.domContainer = null;
   }
 
   public setInputs(inputs: { [key: string]: string }[]): void {
@@ -63,7 +73,10 @@ class Form extends PreviewUI {
 
   protected render() {
     if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
-    ReactDOM.render(
+    if (!this.root) {
+      this.root = ReactDOM.createRoot(this.domContainer);
+    }
+    this.root.render(
       <AppContextProvider
         lang={this.getLang()}
         font={this.getFont()}
@@ -94,7 +107,6 @@ class Form extends PreviewUI {
           }}
         />
       </AppContextProvider>,
-      this.domContainer,
     );
   }
 }

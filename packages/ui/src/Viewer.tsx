@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
+import ReactDOM from 'react-dom/client';
 import { PreviewProps } from '@pdfme/common';
 import { PreviewUI } from './class.js';
 import { DESTROYED_ERR_MSG } from './constants.js';
@@ -7,6 +7,7 @@ import Preview from './components/Preview.js';
 import AppContextProvider from './components/AppContextProvider.js';
 
 class Viewer extends PreviewUI {
+  private root?: ReactDOM.Root;
   private onPageChangeCallback?: (pageInfo: { currentPage: number; totalPages: number }) => void;
   private pageCursor: number = 0;
 
@@ -30,9 +31,21 @@ class Viewer extends PreviewUI {
     return this.template.schemas.length;
   }
 
+  public destroy() {
+    if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
+    if (this.root) {
+      this.root.unmount();
+    }
+    this.resizeObserver.unobserve(this.domContainer);
+    this.domContainer = null;
+  }
+
   protected render() {
     if (!this.domContainer) throw Error(DESTROYED_ERR_MSG);
-    ReactDOM.render(
+    if (!this.root) {
+      this.root = ReactDOM.createRoot(this.domContainer);
+    }
+    this.root.render(
       <AppContextProvider
         lang={this.getLang()}
         font={this.getFont()}
@@ -51,7 +64,6 @@ class Viewer extends PreviewUI {
           }}
         />
       </AppContextProvider>,
-      this.domContainer,
     );
   }
 }
