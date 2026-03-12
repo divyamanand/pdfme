@@ -95,6 +95,7 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     if (region === 'theader' && settings.headerVisibility?.theader === false) continue;
     if (region === 'lheader' && settings.headerVisibility?.lheader === false) continue;
     if (region === 'rheader' && settings.headerVisibility?.rheader === false) continue;
+    if (region === 'footer' && !settings.footer) continue;
 
     const rows = snapshot.getRowsInRegion(region);
     for (const row of rows) {

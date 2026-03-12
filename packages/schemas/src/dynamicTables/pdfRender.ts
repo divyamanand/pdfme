@@ -43,6 +43,7 @@ export async function pdfRender(arg: PDFRenderProps<DynamicTableSchema>): Promis
     if (region === 'theader' && settings.headerVisibility?.theader === false) continue;
     if (region === 'lheader' && settings.headerVisibility?.lheader === false) continue;
     if (region === 'rheader' && settings.headerVisibility?.rheader === false) continue;
+    if (region === 'footer' && !settings.footer) continue;
 
     const rows = snapshot.getRowsInRegion(region);
     for (const row of rows) {

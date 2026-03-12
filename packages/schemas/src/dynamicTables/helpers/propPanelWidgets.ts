@@ -32,7 +32,19 @@ function getTableAndCommit(props: PropPanelWidgetProps) {
   const table = getTable(schema.name, schema.content || '{}');
   const commit = () => {
     const json = commitTable(schema.name, table);
-    props.changeSchemas([{ key: 'content', value: json, schemaId: schema.id }]);
+    const snapshot = table.getRenderSnapshot();
+    const changes: { key: string; value: unknown; schemaId: string }[] = [
+      { key: 'content', value: json, schemaId: schema.id },
+    ];
+    const newW = snapshot.getWidth();
+    const newH = snapshot.getHeight();
+    if (Math.abs(schema.width - newW) > 0.01) {
+      changes.push({ key: 'width', value: newW, schemaId: schema.id });
+    }
+    if (Math.abs(schema.height - newH) > 0.01) {
+      changes.push({ key: 'height', value: newH, schemaId: schema.id });
+    }
+    props.changeSchemas(changes);
   };
   return { table, commit, schema };
 }
@@ -547,7 +559,6 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   const theaderNodes = parsed.headerTrees?.theader ?? [];
   renderRegionSection(rootElement, 'Top Header', vis.theader !== false, (val) => {
     const { table, commit } = getTC();
-    if (val && theaderNodes.length === 0) table.addHeaderCell('theader' as Region);
     table.updateSettings({ headerVisibility: { ...vis, theader: val } });
     commit();
   }, () => {
@@ -570,7 +581,6 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   const lheaderNodes = parsed.headerTrees?.lheader ?? [];
   renderRegionSection(rootElement, 'Left Header', vis.lheader === true, (val) => {
     const { table, commit } = getTC();
-    if (val && lheaderNodes.length === 0) table.addHeaderCell('lheader' as Region);
     table.updateSettings({ headerVisibility: { ...vis, lheader: val } });
     commit();
   }, () => {
@@ -592,7 +602,6 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   const rheaderNodes = parsed.headerTrees?.rheader ?? [];
   renderRegionSection(rootElement, 'Right Header', vis.rheader === true, (val) => {
     const { table, commit } = getTC();
-    if (val && rheaderNodes.length === 0) table.addHeaderCell('rheader' as Region);
     table.updateSettings({ headerVisibility: { ...vis, rheader: val } });
     commit();
   }, () => {
@@ -761,7 +770,6 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   renderRegionSection(rootElement, 'Footer', hasFooter, (val) => {
     const { table, commit } = getTC();
     if (val) {
-      if (footerNodes.length === 0) table.addHeaderCell('footer' as Region);
       table.updateSettings({ footer: { mode: 'every-page' } });
     } else {
       table.updateSettings({ footer: undefined });

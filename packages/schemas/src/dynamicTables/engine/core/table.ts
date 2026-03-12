@@ -862,22 +862,85 @@ export class Table implements ITable {
             if (rc) rc.mergeRect = rect
         }
 
-        const getHeadHeight = (): number =>
-            (regions.theader.reduce((s, r) => s + r.height, 0)) +
-            (regions.lheader.reduce((s, r) => s + r.height, 0)) +
-            (regions.rheader.reduce((s, r) => s + r.height, 0))
+        // Compute region dimension offsets for visibility-aware size calculations
+        // Column layout: [lhD cols | thL cols | rhD cols]
+        // Row layout:    [thD rows | bodyRows rows]
+        // lheader/rheader share rows with body (side-by-side), they don't add height
+        const vis = settings.headerVisibility ?? {}
+        const hasFooter = !!settings.footer
+        const lhD = this.structureStore.getRoots('lheader')
+            ? this.structureStore.getRoots('lheader')!.reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
+            : 0
+        const thD = this.structureStore.getRoots('theader')
+            ? this.structureStore.getRoots('theader')!.reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
+            : 0
+        const thL = this.structureStore.getLeafCount('theader')
+        const rhD = this.structureStore.getRoots('rheader')
+            ? this.structureStore.getRoots('rheader')!.reduce((max, r) => Math.max(max, this.structureStore.getHeightOfCell(r)), 0)
+            : 0
 
-        const getBodyHeight = (): number =>
-            regions.body.reduce((s, r) => s + r.height, 0)
+        // Compute position offsets for hidden regions
+        // When theader is hidden, all cells below shift up by theader's total height
+        let yOffset = 0
+        if (vis.theader === false) {
+            for (let i = 0; i < thD && i < rowHeights.length; i++) yOffset += rowHeights[i]
+        }
+        // When lheader is hidden, all cells to the right shift left by lheader's total width
+        let xOffset = 0
+        if (vis.lheader === false) {
+            for (let i = 0; i < lhD && i < columnWidths.length; i++) xOffset += columnWidths[i]
+        }
 
-        const getFooterHeight = (): number =>
-            regions.footer.reduce((s, r) => s + r.height, 0)
+        // Apply position offsets to all renderable cells
+        // Footer uses independent x coordinates (its own column prefix sums starting from 0),
+        // so xOffset (from hidden lheader) must NOT be applied to footer cells.
+        // yOffset (from hidden theader) applies to all cells including footer since
+        // footer Y = mainTableHeight which includes theader rows.
+        if (xOffset > 0 || yOffset > 0) {
+            for (const [, rc] of cellsById) {
+                const applyX = rc.inRegion === 'footer' ? 0 : xOffset
+                rc.layout = {
+                    ...rc.layout,
+                    x: rc.layout.x - applyX,
+                    y: rc.layout.y - yOffset,
+                }
+            }
+        }
 
-        const getMainWidth = (): number =>
-            columns.reduce((s, c) => s + c.width, 0)
+        const getTheaderHeight = (): number => {
+            if (vis.theader === false) return 0
+            let h = 0
+            for (let i = 0; i < thD && i < rowHeights.length; i++) h += rowHeights[i]
+            return h
+        }
 
-        const getFooterWidth = (): number =>
-            footerColumns.reduce((s, c) => s + c.width, 0)
+        const getBodyHeight = (): number => {
+            let h = 0
+            for (let i = thD; i < rowHeights.length; i++) h += rowHeights[i]
+            return h
+        }
+
+        const getFooterHeight = (): number => {
+            if (!hasFooter) return 0
+            return regions.footer.reduce((s, r) => s + r.height, 0)
+        }
+
+        const getMainWidth = (): number => {
+            let w = 0
+            if (vis.lheader === true) {
+                for (let i = 0; i < lhD && i < columnWidths.length; i++) w += columnWidths[i]
+            }
+            for (let i = lhD; i < lhD + thL && i < columnWidths.length; i++) w += columnWidths[i]
+            if (vis.rheader === true) {
+                for (let i = lhD + thL; i < lhD + thL + rhD && i < columnWidths.length; i++) w += columnWidths[i]
+            }
+            return w
+        }
+
+        const getFooterWidth = (): number => {
+            if (!hasFooter) return 0
+            return footerColumns.reduce((s, c) => s + c.width, 0)
+        }
 
         return {
             settings,
@@ -896,8 +959,8 @@ export class Table implements ITable {
             getCellByID(cellID) { return this.cellsById.get(cellID) },
             getRowsInRegion(region) { return this.regions[region] },
             getWidth() { return Math.max(getMainWidth(), getFooterWidth()) },
-            getHeight() { return getHeadHeight() + getBodyHeight() + getFooterHeight() },
-            getHeadHeight() { return getHeadHeight() },
+            getHeight() { return getTheaderHeight() + getBodyHeight() + getFooterHeight() },
+            getHeadHeight() { return getTheaderHeight() },
             getBodyHeight() { return getBodyHeight() },
             getFooterHeight() { return getFooterHeight() },
         }
