@@ -16,6 +16,7 @@
     "test:local": "LOCAL=true node --experimental-vm-modules node_modules/.bin/jest"
   },
   "dependencies": {
+    "@campxdev/react-blueprint": "^3.1.0",
     "@headlessui/react": "^2.2.0",
     "@pdfme/common": "file:../packages/common/dist",
     "@pdfme/converter": "file:../packages/converter/dist",
