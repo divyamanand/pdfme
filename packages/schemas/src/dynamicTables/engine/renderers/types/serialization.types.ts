@@ -34,7 +34,8 @@ export interface SerializedBodyCell {
  * CellLayout is NOT included because it is always recomputed by LayoutEngine.rebuild().
  */
 export interface TableExportData {
-  headerTrees: Record<Region, SerializedHeaderNode[]>
+  headerTrees: Record<'theader' | 'lheader' | 'rheader', SerializedHeaderNode[]>
+  footer: SerializedBodyCell[][]         // flat 2D array (independent per-row cells)
   body: SerializedBodyCell[][]
   merges: Rect[]
   settings: TableSettings
@@ -42,7 +43,7 @@ export interface TableExportData {
   regionStyles: RegionStyleMap
   columnWidths: number[]
   rowHeights: number[]
-  footerColumnWidths: number[]
+  footerCellWidths: number[][]           // per-cell widths (replaces footerColumnWidths)
   footerRowHeights: number[]
   rules: RulePayload[]
 }

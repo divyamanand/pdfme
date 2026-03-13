@@ -6,6 +6,7 @@ export class StructureStore implements IStructureStore {
     private childrenMap: Map<string, string[]>
     private parentMap: Map<string, string>
     private body: string[][]
+    private footer: string[][] = []
 
     constructor() {
         this.headerRoots = new Map()
@@ -202,5 +203,38 @@ export class StructureStore implements IStructureStore {
         }
         // lheader / rheader → body rows
         return body.length < leafCount
+    }
+
+    addFooterCell(rowIndex: number, cellId: string): void {
+        if (rowIndex >= 0 && rowIndex < this.footer.length) {
+            this.footer[rowIndex].push(cellId)
+        }
+    }
+
+    removeFooterCell(rowIndex: number, colIndex: number): string {
+        if (rowIndex >= 0 && rowIndex < this.footer.length) {
+            const removed = this.footer[rowIndex].splice(colIndex, 1)
+            return removed[0] ?? ''
+        }
+        return ''
+    }
+
+    addFooterRow(cellId: string): void {
+        this.footer.push([cellId])
+    }
+
+    removeFooterRow(rowIndex: number): string[] {
+        if (rowIndex >= 0 && rowIndex < this.footer.length) {
+            return this.footer.splice(rowIndex, 1)[0]
+        }
+        return []
+    }
+
+    getFooter(): readonly (readonly string[])[] {
+        return this.footer
+    }
+
+    getFooterCell(rowIndex: number, colIndex: number): string | undefined {
+        return this.footer[rowIndex]?.[colIndex]
     }
 }

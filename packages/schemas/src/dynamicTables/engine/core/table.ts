@@ -226,9 +226,11 @@ export class Table implements ITable {
         return mainH + footerH
     }
 
-    /** Sum of all footer column widths */
+    /** Sum of max footer row width across all footer rows */
     private getFooterGridWidth(): number {
-        return this.layoutEngine.getFooterColumnWidths().reduce((s, w) => s + w, 0)
+        const cellWidths = this.layoutEngine.getFooterCellWidths()
+        if (cellWidths.length === 0) return 0
+        return Math.max(...cellWidths.map(row => row.reduce((s, w) => s + w, 0)))
     }
 
     /** Current total width (max of main grid and footer) */
@@ -486,24 +488,64 @@ export class Table implements ITable {
         return this.layoutEngine.getRowHeights()
     }
 
-    // --- Footer Geometry (independent) ---
-
-    setFooterColumnWidth(colIndex: number, width: number): void {
-        this.layoutEngine.setFooterColumnWidth(colIndex, width)
-        this.rebuildGeometryAndEvaluate()
-    }
+    // --- Footer Geometry (independent, per-cell per-row) ---
 
     setFooterRowHeight(rowIndex: number, height: number): void {
         this.layoutEngine.setFooterRowHeight(rowIndex, height)
         this.rebuildGeometryAndEvaluate()
     }
 
-    getFooterColumnWidths(): number[] {
-        return this.layoutEngine.getFooterColumnWidths()
-    }
-
     getFooterRowHeights(): number[] {
         return this.layoutEngine.getFooterRowHeights()
+    }
+
+    getFooterCellWidths(): number[][] {
+        return this.layoutEngine.getFooterCellWidths()
+    }
+
+    setFooterCellWidth(rowIndex: number, colIndex: number, width: number): void {
+        this.layoutEngine.setFooterCellWidth(rowIndex, colIndex, width)
+        this.rebuildGeometryAndEvaluate()
+    }
+
+    // --- Footer Structure ---
+
+    getFooter(): readonly (readonly string[])[] {
+        return this.structureStore.getFooter()
+    }
+
+    addFooterRow(): void {
+        const cellId = this.cellRegistry.createCell('footer', '')
+        this.structureStore.addFooterRow(cellId)
+        const rowIdx = this.structureStore.getFooter().length - 1
+        this.layoutEngine.insertFooterRow(rowIdx, this.layoutEngine.getDefaultCellHeight())
+        this.layoutEngine.insertFooterCell(rowIdx, 0, this.layoutEngine.getDefaultCellWidth())
+        this.rebuildAndEvaluate()
+    }
+
+    addFooterCell(rowIndex: number): void {
+        const cellId = this.cellRegistry.createCell('footer', '')
+        this.structureStore.addFooterCell(rowIndex, cellId)
+        const colIdx = this.structureStore.getFooter()[rowIndex].length - 1
+        this.layoutEngine.insertFooterCell(rowIndex, colIdx, this.layoutEngine.getDefaultCellWidth())
+        this.rebuildAndEvaluate()
+    }
+
+    removeFooterCell(rowIndex: number, colIndex: number): void {
+        const cellId = this.structureStore.removeFooterCell(rowIndex, colIndex)
+        if (cellId) this.cellRegistry.deleteCell(cellId)
+        this.layoutEngine.removeFooterCell(rowIndex, colIndex)
+        this.rebuildAndEvaluate()
+    }
+
+    removeFooterRow(rowIndex: number): void {
+        const removed = this.structureStore.removeFooterRow(rowIndex)
+        for (const id of removed) this.cellRegistry.deleteCell(id)
+        this.layoutEngine.removeFooterRow(rowIndex)
+        if (this.structureStore.getFooter().length === 0) {
+            this.settings = { ...this.settings, footer: undefined }
+        }
+        this.rebuildAndEvaluate()
     }
 
     setTablePosition(position: { x: number; y: number }): void {
@@ -605,7 +647,6 @@ export class Table implements ITable {
         const regionStyles = this.getRegionStyles()
         const columnWidths = this.getColumnWidths()
         const rowHeights = this.getRowHeights()
-        const footerColumnWidths = this.getFooterColumnWidths()
         const footerRowHeights = this.getFooterRowHeights()
         const uiState = this.getUIState()
 
@@ -696,46 +737,26 @@ export class Table implements ITable {
             }
         }
 
-        // Footer region: walk footer tree independently
-        // Footer cells use global coords; map to local row indices for dimension lookup
-        const footerRowStart = rowHeights.length  // = thD + bodyRows
-        const footerCellsByLocalRow = new Map<number, ICell[]>()
-        const walkFooterTree = (cellId: string) => {
-            const cell = this.getCellById(cellId)
-            if (cell?.layout && cell.layout.rowSpan > 0 && cell.layout.colSpan > 0) {
-                const localRow = cell.layout.row - footerRowStart
-                if (!footerCellsByLocalRow.has(localRow)) footerCellsByLocalRow.set(localRow, [])
-                footerCellsByLocalRow.get(localRow)!.push(cell)
-            }
-            const children = this.structureStore.getChildren(cellId)
-            if (children) {
-                for (const child of children) walkFooterTree(child)
-            }
-        }
-        const footerRoots = this.structureStore.getRoots('footer')
-        if (footerRoots) {
-            for (const root of footerRoots) walkFooterTree(root)
-        }
-
-        const sortedFooterRows = [...footerCellsByLocalRow.keys()].sort((a, b) => a - b)
-        for (const localRowIdx of sortedFooterRows) {
-            const rowCells = footerCellsByLocalRow.get(localRowIdx)!
-            rowCells.sort((a, b) => a.layout!.col - b.layout!.col)
+        // Footer region: iterate 2D grid
+        const footerGrid = this.structureStore.getFooter()
+        const footerCellWidths = this.layoutEngine.getFooterCellWidths()
+        for (let r = 0; r < footerGrid.length; r++) {
             const cells = new Map<number, RenderableCell>()
             const rawValues: (string | number)[] = []
-            let colIdx = 0
-            for (const cell of rowCells) {
+            for (let c = 0; c < footerGrid[r].length; c++) {
+                const cellId = footerGrid[r][c]
+                const cell = this.getCellById(cellId)
+                if (!cell?.layout || cell.layout.rowSpan === 0 || cell.layout.colSpan === 0) continue
                 const renderableCell = buildRenderableCell(cell)
                 cellsById.set(cell.cellID, renderableCell)
-                cells.set(colIdx, renderableCell)
+                cells.set(c, renderableCell)
                 rawValues.push(cell.rawValue)
-                colIdx++
             }
             regions.footer.push({
-                rowIndex: localRowIdx,
-                globalRowIndex: localRowIdx,
+                rowIndex: r,
+                globalRowIndex: r,
                 region: 'footer',
-                height: footerRowHeights[localRowIdx] || this.layoutEngine.getDefaultCellHeight(),
+                height: footerRowHeights[r] ?? this.layoutEngine.getDefaultCellHeight(),
                 cells,
                 rawValues,
             })
@@ -746,7 +767,14 @@ export class Table implements ITable {
             width,
         }))
 
-        const footerColumns: RenderableColumn[] = footerColumnWidths.map((width, idx) => ({
+        // footer columns: flatten per-row widths into a single representative column list
+        // (use the widest row, or first row if all same length)
+        const footerCellWidthsSnapshot = footerCellWidths
+        const longestFooterRow = footerCellWidthsSnapshot.reduce(
+            (best, row) => row.length > best.length ? row : best,
+            [] as number[],
+        )
+        const footerColumns: RenderableColumn[] = longestFooterRow.map((width, idx) => ({
             colIndex: idx,
             width,
         }))
@@ -884,8 +912,8 @@ export class Table implements ITable {
     // --- Serialization ---
 
     exportState(): TableExportData {
-        const headerRegions: Region[] = ['theader', 'lheader', 'rheader', 'footer']
-        const headerTrees = {} as Record<Region, SerializedHeaderNode[]>
+        const headerRegions: ('theader' | 'lheader' | 'rheader')[] = ['theader', 'lheader', 'rheader']
+        const headerTrees = {} as Record<'theader' | 'lheader' | 'rheader', SerializedHeaderNode[]>
 
         for (const region of headerRegions) {
             const roots = this.structureStore.getRoots(region)
@@ -893,11 +921,23 @@ export class Table implements ITable {
                 ? roots.map(rootId => this.serializeHeaderNode(rootId))
                 : []
         }
-        // body region has no header tree
-        headerTrees['body'] = []
 
         const bodyGrid = this.structureStore.getBody()
         const body: SerializedBodyCell[][] = bodyGrid.map(row =>
+            row.map(cellId => {
+                const cell = this.cellRegistry.getCellById(cellId)!
+                return {
+                    cellId: cell.cellID,
+                    rawValue: cell.rawValue,
+                    style: { ...cell.styleOverrides },
+                    overflow: cell.overflow,
+                    isDynamic: cell.isDynamic,
+                    computedValue: cell.computedValue,
+                }
+            })
+        )
+
+        const footer: SerializedBodyCell[][] = this.structureStore.getFooter().map(row =>
             row.map(cellId => {
                 const cell = this.cellRegistry.getCellById(cellId)!
                 return {
@@ -918,6 +958,7 @@ export class Table implements ITable {
 
         return {
             headerTrees,
+            footer,
             body,
             merges,
             settings: { ...this.settings },
@@ -925,7 +966,7 @@ export class Table implements ITable {
             regionStyles: { ...this._regionStyles },
             columnWidths: [...this.layoutEngine.getColumnWidths()],
             rowHeights: [...this.layoutEngine.getRowHeights()],
-            footerColumnWidths: [...this.layoutEngine.getFooterColumnWidths()],
+            footerCellWidths: this.layoutEngine.getFooterCellWidths(),
             footerRowHeights: [...this.layoutEngine.getFooterRowHeights()],
             rules,
         }
@@ -957,8 +998,8 @@ export class Table implements ITable {
         const layoutEngine = new LayoutEngine(mergeRegistry, structureStore, cellRegistry)
         const ruleRegistry = new RuleRegistry()
 
-        // Restore header trees
-        const headerRegions: Region[] = ['theader', 'lheader', 'rheader', 'footer']
+        // Restore header trees (theader, lheader, rheader only — footer is now a flat 2D grid)
+        const headerRegions: ('theader' | 'lheader' | 'rheader')[] = ['theader', 'lheader', 'rheader']
         for (const region of headerRegions) {
             const trees = data.headerTrees[region] ?? []
             for (const node of trees) {
@@ -985,6 +1026,72 @@ export class Table implements ITable {
             structureStore.insertBodyRow(rowIdx, cellIds)
         }
 
+        // Restore footer 2D grid (new format)
+        const footerRows = data.footer ?? []
+        if (footerRows.length > 0) {
+            for (let r = 0; r < footerRows.length; r++) {
+                const row = footerRows[r]
+                if (row.length === 0) continue
+                const firstCd = row[0]
+                cellRegistry.createCellWithId(
+                    firstCd.cellId, 'footer', firstCd.rawValue?.toString(),
+                    firstCd.style, firstCd.isDynamic, firstCd.computedValue, firstCd.overflow,
+                )
+                structureStore.addFooterRow(firstCd.cellId)
+                layoutEngine.insertFooterRow(r, data.footerRowHeights?.[r] ?? layoutEngine.getDefaultCellHeight())
+                layoutEngine.insertFooterCell(r, 0, data.footerCellWidths?.[r]?.[0] ?? layoutEngine.getDefaultCellWidth())
+                for (let c = 1; c < row.length; c++) {
+                    const cd = row[c]
+                    cellRegistry.createCellWithId(
+                        cd.cellId, 'footer', cd.rawValue?.toString(),
+                        cd.style, cd.isDynamic, cd.computedValue, cd.overflow,
+                    )
+                    structureStore.addFooterCell(r, cd.cellId)
+                    layoutEngine.insertFooterCell(r, c, data.footerCellWidths?.[r]?.[c] ?? layoutEngine.getDefaultCellWidth())
+                }
+            }
+        } else {
+            // Backward compat: migrate old tree-based footer (headerTrees.footer) to flat first row
+            const oldFooterNodes = (data as any).headerTrees?.footer as any[] | undefined
+            if (oldFooterNodes && oldFooterNodes.length > 0) {
+                const collectLeaves = (nodes: any[]): any[] => {
+                    const leaves: any[] = []
+                    const walk = (n: any) => {
+                        if (!n.children || n.children.length === 0) leaves.push(n)
+                        else n.children.forEach(walk)
+                    }
+                    nodes.forEach(walk)
+                    return leaves
+                }
+                const leaves = collectLeaves(oldFooterNodes)
+                if (leaves.length > 0) {
+                    cellRegistry.createCellWithId(leaves[0].cellId, 'footer', String(leaves[0].rawValue ?? ''), leaves[0].style, leaves[0].isDynamic, leaves[0].computedValue, leaves[0].overflow)
+                    structureStore.addFooterRow(leaves[0].cellId)
+                    layoutEngine.insertFooterRow(0, layoutEngine.getDefaultCellHeight())
+                    layoutEngine.insertFooterCell(0, 0, layoutEngine.getDefaultCellWidth())
+                    for (let c = 1; c < leaves.length; c++) {
+                        cellRegistry.createCellWithId(leaves[c].cellId, 'footer', String(leaves[c].rawValue ?? ''), leaves[c].style, leaves[c].isDynamic, leaves[c].computedValue, leaves[c].overflow)
+                        structureStore.addFooterCell(0, leaves[c].cellId)
+                        layoutEngine.insertFooterCell(0, c, layoutEngine.getDefaultCellWidth())
+                    }
+                }
+            }
+            // Also restore old flat footerColumnWidths if present (further backward compat)
+            const oldFooterColWidths = (data as any).footerColumnWidths as number[] | undefined
+            if (oldFooterColWidths && oldFooterColWidths.length > 0 && footerRows.length === 0) {
+                for (let i = 0; i < oldFooterColWidths.length; i++) {
+                    layoutEngine.setFooterCellWidth(0, i, oldFooterColWidths[i])
+                }
+            }
+            // Restore old footer row heights if no new data
+            const oldFooterRowHts = (data as any).footerRowHeights as number[] | undefined
+            if (oldFooterRowHts) {
+                for (let i = 0; i < oldFooterRowHts.length; i++) {
+                    layoutEngine.setFooterRowHeight(i, oldFooterRowHts[i])
+                }
+            }
+        }
+
         // Restore geometry (default dimensions now live in settings)
         layoutEngine.setDefaultCellWidth(data.settings.defaultCellWidth ?? 30)
         layoutEngine.setDefaultCellHeight(data.settings.defaultCellHeight ?? 10)
@@ -1003,21 +1110,11 @@ export class Table implements ITable {
             }
         }
 
-        // Restore footer dimensions (independent from main grid)
-        const footerColWidths = data.footerColumnWidths ?? []
-        for (let i = 0; i < footerColWidths.length; i++) {
-            if (i < layoutEngine.getFooterColumnWidths().length) {
-                layoutEngine.setFooterColumnWidth(i, footerColWidths[i])
-            } else {
-                layoutEngine.insertFooterColumnWidth(i, footerColWidths[i])
-            }
-        }
-        const footerRowHts = data.footerRowHeights ?? []
-        for (let i = 0; i < footerRowHts.length; i++) {
-            if (i < layoutEngine.getFooterRowHeights().length) {
+        // Footer row heights for new format (already set per-row above, but apply saved values if present)
+        if (footerRows.length > 0) {
+            const footerRowHts = data.footerRowHeights ?? []
+            for (let i = 0; i < footerRowHts.length; i++) {
                 layoutEngine.setFooterRowHeight(i, footerRowHts[i])
-            } else {
-                layoutEngine.insertFooterRowHeight(i, footerRowHts[i])
             }
         }
 

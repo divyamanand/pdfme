@@ -21,7 +21,7 @@ import type { CellStyle, OverflowMode, Region, RegionStyleMap } from '../types'
 import { resolveStyle } from '../styles/resolve'
 import { TextMeasurer } from '../rules/expression/text-measurer'
 
-const HEADER_REGIONS: readonly Region[] = ['theader', 'lheader', 'rheader', 'footer']
+const HEADER_REGIONS: readonly Region[] = ['theader', 'lheader', 'rheader']
 
 export class OverflowEngine {
     private patches: Map<string, Partial<CellStyle>> = new Map()
@@ -261,6 +261,14 @@ export class OverflowEngine {
         }
 
         for (const row of this.structureStore.getBody()) {
+            for (const cellId of row) {
+                const cell = this.cellRegistry.getCellById(cellId)
+                if (cell) callback(cell)
+            }
+        }
+
+        // Walk footer grid
+        for (const row of this.structureStore.getFooter()) {
             for (const cellId of row) {
                 const cell = this.cellRegistry.getCellById(cellId)
                 if (cell) callback(cell)

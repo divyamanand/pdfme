@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find e:DevcampxpdfmepackagesschemassrcdynamicTables -type f -name *uiRender* -o -name *canvas*)",
+      "Bash(grep -E \"\\\\.ts$\")"
+    ]
+  }
+}

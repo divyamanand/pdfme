@@ -20,8 +20,7 @@ import { showToast } from './helpers/toast.js';
 import {
   appendAddRowButton,
   appendRemoveRowButtons,
-  appendColumnResizeHandles,
-  appendRowResizeHandles,
+  attachCellResizeInteractions,
   handleCellClick,
 } from './uiComponents/index.js';
 
@@ -45,7 +44,7 @@ function commit(table: Table, schemaName: string, onChange: (arg: { key: string;
  * 3. Attach interactive controls that call Table directly
  */
 export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<void> {
-  const { schema, value, rootElement, mode, onChange, scale, basePdf } = arg;
+  const { schema, value, rootElement, mode, onChange, basePdf } = arg;
   const table = getTable(schema.name, value);
 
   // Compute available space from page boundaries
@@ -237,10 +236,9 @@ export async function uiRender(arg: UIRenderProps<DynamicTableSchema>): Promise<
     appendRemoveRowButtons(rootElement, snapshot, table, doCommit);
   }
 
-  // Designer mode controls — only resize handles (structure controls are in propPanel)
+  // Designer mode controls — scroll + right-click resize (structure controls are in propPanel)
   if (mode === 'designer' && doCommit) {
-    appendColumnResizeHandles(rootElement, snapshot, table, doCommit, scale);
-    appendRowResizeHandles(rootElement, snapshot, table, doCommit, scale);
+    attachCellResizeInteractions(rootElement, snapshot, table, doCommit);
   }
 
   // Viewer mode: reset editing state

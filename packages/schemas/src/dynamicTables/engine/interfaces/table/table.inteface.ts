@@ -49,11 +49,18 @@ export interface ITable {
     setTablePosition(position: TablePosition): void
     getTablePosition(): TablePosition
 
-    // Footer Geometry (independent)
-    setFooterColumnWidth(colIndex: number, width: number): void
+    // Footer Geometry (independent, per-cell per-row)
     setFooterRowHeight(rowIndex: number, height: number): void
-    getFooterColumnWidths(): number[]
     getFooterRowHeights(): number[]
+    getFooterCellWidths(): number[][]
+    setFooterCellWidth(rowIndex: number, colIndex: number, width: number): void
+
+    // Footer Structure
+    getFooter(): readonly (readonly string[])[]
+    addFooterRow(): void
+    addFooterCell(rowIndex: number): void
+    removeFooterCell(rowIndex: number, colIndex: number): void
+    removeFooterRow(rowIndex: number): void
 
     // Layout
     getCompleteGrid(): string[][]

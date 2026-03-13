@@ -26,15 +26,17 @@ export interface ILayoutEngine {
     getColumnWidths(): number[]
     getRowHeights(): number[]
 
-    // Footer dimension arrays (independent from main grid)
-    setFooterColumnWidth(colIndex: number, width: number): void
+    // Footer dimension arrays (independent from main grid, per-cell per-row)
     setFooterRowHeight(rowIndex: number, height: number): void
-    insertFooterColumnWidth(colIndex: number, width: number): void
-    removeFooterColumnWidth(colIndex: number): void
-    insertFooterRowHeight(rowIndex: number, height: number): void
-    removeFooterRowHeight(rowIndex: number): void
-    getFooterColumnWidths(): number[]
     getFooterRowHeights(): number[]
+
+    // Footer cell dimensions (per-cell, independent per row)
+    getFooterCellWidths(): number[][]
+    setFooterCellWidth(rowIndex: number, colIndex: number, width: number): void
+    insertFooterCell(rowIndex: number, colIndex: number, width: number): void
+    removeFooterCell(rowIndex: number, colIndex: number): void
+    insertFooterRow(rowIndex: number, height: number): void
+    removeFooterRow(rowIndex: number): void
 
     // Table position (renderer offset)
     setTablePosition(position: TablePosition): void

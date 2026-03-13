@@ -3,7 +3,7 @@
  */
 
 import type { PropPanelWidgetProps } from '@pdfme/common';
-import type { SerializedHeaderNode, Region } from '../../engine/index.js';
+import type { SerializedHeaderNode, SerializedBodyCell, Region } from '../../engine/index.js';
 import { showToast } from '../toast.js';
 import { buildMergeRect } from '../../uiComponents/cellSelection.js';
 import type { WidgetSchema } from '../domUtils.js';
@@ -336,12 +336,15 @@ export function structureWidget(props: PropPanelWidgetProps): void {
 
   rootElement.appendChild(bodySection);
 
-  // --- Footer ---
-  const footerNodes = parsed.headerTrees?.footer ?? [];
+  // --- Footer (flat 2D rows, independent cells) ---
+  const footerGrid: SerializedBodyCell[][] = parsed.footer ?? [];
   renderRegionSection(rootElement, 'Footer', hasFooter, (val) => {
     const { table, commit } = getTC();
     if (val) {
       table.updateSettings({ footer: { mode: 'every-page' } });
+      if (table.getFooter().length === 0) {
+        table.addFooterRow();
+      }
     } else {
       table.updateSettings({ footer: undefined });
     }
@@ -349,15 +352,56 @@ export function structureWidget(props: PropPanelWidgetProps): void {
   }, () => {
     const container = document.createElement('div');
     container.style.paddingLeft = '12px';
-    renderHeaderTree(container, footerNodes, 'footer' as Region, getTC);
-    const addBtn = createSmallButton('+', 'Add footer cell', () => {
-      const { table, commit } = getTC();
-      const result = table.addHeaderCell('footer' as Region);
-      if (result === 'exceeds-bounds') { showToast('Table would exceed page boundaries'); return; }
-      commit();
+
+    footerGrid.forEach((row: SerializedBodyCell[], rowIdx: number) => {
+      const rowEl = createRow();
+      const rowLabel = document.createElement('span');
+      rowLabel.textContent = `Row ${rowIdx + 1}:`;
+      Object.assign(rowLabel.style, { fontSize: '11px', color: '#666', marginRight: '4px' });
+      rowEl.appendChild(rowLabel);
+
+      row.forEach((_cell: SerializedBodyCell, colIdx: number) => {
+        const chip = document.createElement('span');
+        chip.textContent = String(_cell.rawValue || `Cell ${colIdx + 1}`);
+        Object.assign(chip.style, {
+          fontSize: '11px', padding: '1px 6px', background: '#e8f0fe',
+          borderRadius: '10px', marginRight: '2px', display: 'inline-flex', alignItems: 'center', gap: '2px',
+        });
+        const del = document.createElement('span');
+        del.textContent = '×';
+        del.style.cursor = 'pointer';
+        del.addEventListener('click', () => {
+          const { table: t, commit: c } = getTC();
+          t.removeFooterCell(rowIdx, colIdx);
+          c();
+        });
+        chip.appendChild(del);
+        rowEl.appendChild(chip);
+      });
+
+      const addCellBtn = createSmallButton('+', 'Add cell to this row', () => {
+        const { table: t, commit: c } = getTC();
+        t.addFooterCell(rowIdx);
+        c();
+      });
+      rowEl.appendChild(addCellBtn);
+
+      const removeRowBtn = createSmallButton('−', 'Remove row', () => {
+        const { table: t, commit: c } = getTC();
+        t.removeFooterRow(rowIdx);
+        c();
+      });
+      rowEl.appendChild(removeRowBtn);
+      container.appendChild(rowEl);
     });
-    addBtn.style.marginTop = '4px';
-    container.appendChild(addBtn);
+
+    const addRowBtn = createSmallButton('+ Add Row', 'Add footer row', () => {
+      const { table: t, commit: c } = getTC();
+      t.addFooterRow();
+      c();
+    });
+    addRowBtn.style.marginTop = '4px';
+    container.appendChild(addRowBtn);
     return container;
   });
 

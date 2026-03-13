@@ -47,4 +47,14 @@ export interface IStructureStore {
 
     /** Check if the body grid needs a new row/col slice to match this region's current leaf count */
     needsBodySliceForRegion(region: Region): boolean
+
+    // =====================================================
+    // FOOTER GRID (independent 2D structure, no hierarchy)
+    // =====================================================
+    addFooterCell(rowIndex: number, cellId: string): void
+    removeFooterCell(rowIndex: number, colIndex: number): string
+    addFooterRow(cellId: string): void
+    removeFooterRow(rowIndex: number): string[]
+    getFooter(): readonly (readonly string[])[]
+    getFooterCell(rowIndex: number, colIndex: number): string | undefined
 }
