@@ -65,6 +65,16 @@ export function createDefaultTableValue(): string {
     ['', '', ''],
   ]);
 
+  // Set column widths and row heights to match the defaultSchema dimensions (150 × 80mm)
+  // 3 cols × 50mm = 150mm width; 4 rows × 20mm = 80mm height
+  table.setColumnWidth(0, 50);
+  table.setColumnWidth(1, 50);
+  table.setColumnWidth(2, 50);
+  table.setRowHeight(0, 20);
+  table.setRowHeight(1, 20);
+  table.setRowHeight(2, 20);
+  table.setRowHeight(3, 20);
+
   return JSON.stringify(table.exportState());
 }
 

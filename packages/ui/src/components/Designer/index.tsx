@@ -222,7 +222,8 @@ const TemplateEditor = ({
     }
 
     commitSchemas(schemasList[pageCursor].concat(s));
-    setTimeout(() => onEdit([document.getElementById(s.id)!]));
+    const newElement = document.getElementById(s.id);
+    if (newElement) onEdit([newElement]);
   };
 
   const onSortEnd = (sortedSchemas: SchemaForUI[]) => {

@@ -1001,14 +1001,14 @@ export class Table implements ITable {
         // Restore header trees (theader, lheader, rheader only — footer is now a flat 2D grid)
         const headerRegions: ('theader' | 'lheader' | 'rheader')[] = ['theader', 'lheader', 'rheader']
         for (const region of headerRegions) {
-            const trees = data.headerTrees[region] ?? []
+            const trees = data.headerTrees?.[region] ?? []
             for (const node of trees) {
                 Table.restoreHeaderNode(node, region, cellRegistry, structureStore, undefined)
             }
         }
 
         // Restore body grid
-        for (let rowIdx = 0; rowIdx < data.body.length; rowIdx++) {
+        for (let rowIdx = 0; rowIdx < (data.body ?? []).length; rowIdx++) {
             const row = data.body[rowIdx]
             const cellIds: string[] = []
             for (const cellData of row) {
@@ -1093,16 +1093,16 @@ export class Table implements ITable {
         }
 
         // Restore geometry (default dimensions now live in settings)
-        layoutEngine.setDefaultCellWidth(data.settings.defaultCellWidth ?? 30)
-        layoutEngine.setDefaultCellHeight(data.settings.defaultCellHeight ?? 10)
-        for (let i = 0; i < data.columnWidths.length; i++) {
+        layoutEngine.setDefaultCellWidth(data.settings?.defaultCellWidth ?? 30)
+        layoutEngine.setDefaultCellHeight(data.settings?.defaultCellHeight ?? 10)
+        for (let i = 0; i < (data.columnWidths ?? []).length; i++) {
             if (i < layoutEngine.getColumnWidths().length) {
                 layoutEngine.setColumnWidth(i, data.columnWidths[i])
             } else {
                 layoutEngine.insertColumnWidth(i, data.columnWidths[i])
             }
         }
-        for (let i = 0; i < data.rowHeights.length; i++) {
+        for (let i = 0; i < (data.rowHeights ?? []).length; i++) {
             if (i < layoutEngine.getRowHeights().length) {
                 layoutEngine.setRowHeight(i, data.rowHeights[i])
             } else {
@@ -1125,9 +1125,9 @@ export class Table implements ITable {
             layoutEngine,
             mergeRegistry,
             undefined as unknown as IRuleEngine,
-            data.settings,
-            data.tableStyle,
-            data.regionStyles,
+            data.settings ?? {},
+            data.tableStyle ?? {},
+            data.regionStyles ?? {},
         )
 
         // Create real rule engine and wire it up
@@ -1135,12 +1135,12 @@ export class Table implements ITable {
         ;(table as any).ruleEngine = ruleEngine
 
         // Import rules
-        if (data.rules.length > 0) {
+        if ((data.rules ?? []).length > 0) {
             ruleEngine.importRules(data.rules)
         }
 
         // Restore merges (must be done after layout engine has structure)
-        for (const merge of data.merges) {
+        for (const merge of (data.merges ?? [])) {
             mergeRegistry.createMerge(merge)
         }
 
