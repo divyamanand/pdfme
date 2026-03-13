@@ -12,7 +12,7 @@ import time from './date/time.js';
 import select from './select/index.js';
 import radioGroup from './radioGroup/index.js';
 import checkbox from './checkbox/index.js';
-import dynamicTable from './dynamicTables/index.js';
+import dynamicTable from './dynamicTable/index.js';
 
 const builtInPlugins = { Text: text };
 

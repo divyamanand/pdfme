@@ -12,12 +12,21 @@ const MIN_CELL_SIZE = 3   // mm
  *
  * Scroll direction: UP = increase, DOWN = decrease (fixed 1mm step)
  */
+/** Key for storing AbortController on root element to clean up previous listeners */
+const ABORT_KEY = Symbol('resizeAbort')
+
 export function attachCellResizeInteractions(
-    root: HTMLElement,
+    root: HTMLElement & { [ABORT_KEY]?: AbortController },
     snapshot: RenderableTableInstance,
     table: Table,
     commit: () => void,
 ): void {
+    // Clean up listeners from previous render to prevent accumulation
+    root[ABORT_KEY]?.abort()
+    const controller = new AbortController()
+    root[ABORT_KEY] = controller
+    const { signal } = controller
+
     // Build a lookup: cellID → { row, region } for fast access on event
     const cellMap = new Map<string, { row: RenderableRow; region: Region; colIdx: number }>()
 
@@ -74,7 +83,7 @@ export function attachCellResizeInteractions(
             else table.setRowHeight(row.globalRowIndex, newHeight)
             commit()
         }
-    }, { passive: false, capture: true })
+    }, { passive: false, capture: true, signal })
 
     // Single delegated contextmenu listener on root
     root.addEventListener('contextmenu', (e: MouseEvent) => {
@@ -112,7 +121,7 @@ export function attachCellResizeInteractions(
                 commit()
             },
         )
-    }, { capture: true })
+    }, { capture: true, signal })
 }
 
 function showResizeMenu(

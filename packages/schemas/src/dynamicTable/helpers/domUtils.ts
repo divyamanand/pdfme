@@ -32,6 +32,9 @@ export function getTableAndCommit(props: PropPanelWidgetProps) {
       changes.push({ key: 'height', value: newH, schemaId: schema.id });
     }
     props.changeSchemas(changes);
+    // With uninterruptedEditMode, React won't re-render the canvas on schema
+    // changes. Trigger the canvas render callback so the UI reflects the change.
+    table.triggerRender();
   };
   return { table, commit, schema };
 }

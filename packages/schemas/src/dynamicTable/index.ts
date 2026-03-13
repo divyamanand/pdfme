@@ -11,5 +11,6 @@ const dynamicTableSchema: Plugin<DynamicTableSchema> = {
   ui: uiRender,
   propPanel,
   icon: createSvgStr(Table),
+  uninterruptedEditMode: true,
 };
 export default dynamicTableSchema;
