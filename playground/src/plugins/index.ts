@@ -1,11 +1,12 @@
 import {
   multiVariableText,
-  barcodes,
   image,
   line,
   rectangle,
   ellipse,
-  dynamicTable
+  dynamicTable,
+  dynamicQrCode,
+  dynamicBarcode,
 } from '@pdfme/schemas';
 import { signature } from './signature';
 
@@ -18,7 +19,7 @@ export const getPlugins = () => {
     Ellipse: ellipse,
     Image: image,
     Signature: signature,
-    QR: barcodes.qrcode,
-    Barcode: barcodes.code128,
+    QR: dynamicQrCode,
+    Barcode: dynamicBarcode,
   };
 };

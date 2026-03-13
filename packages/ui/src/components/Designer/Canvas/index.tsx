@@ -526,6 +526,7 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
                   : token.colorPrimary
               }`}
               scale={scale}
+              pageContext={{ currentPage: index + 1, totalPages: schemasList.length }}
             />
           );
         }}

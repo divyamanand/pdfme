@@ -54,6 +54,7 @@ export interface PDFRenderProps<T extends Schema> {
   pdfDoc: PDFDocument;
   page: PDFPage;
   options: GeneratorOptions;
+  pageContext?: { currentPage: number; totalPages: number };
 
   _cache: Map<string | number, unknown>;
 }
@@ -91,6 +92,7 @@ export type UIRenderProps<T extends Schema> = {
   theme: GlobalToken;
   i18n: (key: string) => string;
   scale: number;
+  pageContext?: { currentPage: number; totalPages: number };
   _cache: Map<string | number, unknown>;
 };
 

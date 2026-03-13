@@ -13,8 +13,9 @@ import select from './select/index.js';
 import radioGroup from './radioGroup/index.js';
 import checkbox from './checkbox/index.js';
 import dynamicTable from './dynamicTable/index.js';
+import variableBarcodes, { dynamicQrCode, dynamicBarcode } from './variableBarcode/index.js';
 
-const builtInPlugins = { Text: text };
+const builtInPlugins = { Text: multiVariableText };
 
 export {
   builtInPlugins,
@@ -35,6 +36,9 @@ export {
   radioGroup,
   checkbox,
   dynamicTable,
+  variableBarcodes,
+  dynamicQrCode,
+  dynamicBarcode,
 };
 
 // Export utility functions

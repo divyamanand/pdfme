@@ -6,7 +6,12 @@ const mapDynamicVariables = (props: PropPanelWidgetProps) => {
   const { rootElement, changeSchemas, activeSchema, i18n, options } = props;
 
   const mvtSchema = activeSchema as unknown as MultiVariableTextSchema;
-  const text = mvtSchema.text || '';
+  const text = mvtSchema.text ?? '';
+  if (!text) {
+    // Static mode: no template text, no variables to manage
+    rootElement.style.display = 'none';
+    return;
+  }
   const variables = JSON.parse(mvtSchema.content || '{}') as Record<string, string>;
   const variablesChanged = updateVariablesFromText(text, variables);
   const varNames = Object.keys(variables);
@@ -117,8 +122,8 @@ export const propPanel: PropPanel<MultiVariableTextSchema> = {
   defaultSchema: {
     ...parentPropPanel.defaultSchema,
     readOnly: false,
-    type: 'multiVariableText',
-    text: 'Add text here using {} for variables ',
+    type: 'text',
+    text: 'Type Something...',
     width: 50,
     height: 15,
     content: '{}',
@@ -126,35 +131,56 @@ export const propPanel: PropPanel<MultiVariableTextSchema> = {
   },
 };
 
-const updateVariablesFromText = (text: string, variables: Record<string, string>): boolean => {
-  const regex = /\{([^{}]+)}/g;
-  const matches = text.match(regex);
-  let changed = false;
+/** Known JS globals/keywords that should NOT be treated as user-defined variables */
+const RESERVED_NAMES = new Set([
+  'true', 'false', 'null', 'undefined', 'typeof', 'instanceof', 'in',
+  'void', 'delete', 'new', 'this', 'NaN', 'Infinity',
+  'Math', 'String', 'Number', 'Boolean', 'Array', 'Object', 'Date', 'JSON',
+  'isNaN', 'parseFloat', 'parseInt', 'decodeURI', 'decodeURIComponent',
+  'encodeURI', 'encodeURIComponent', 'date', 'dateTime',
+  'currentPage', 'totalPages',
+]);
 
-  if (matches) {
-    // Add any new variables
-    for (const match of matches) {
-      const variableName = match.replace('{', '').replace('}', '');
-      if (!(variableName in variables)) {
-        // NOTE: We upper case the variable name as the default value
-        variables[variableName] = variableName.toUpperCase();
-        changed = true;
-      }
+/**
+ * Extract user-defined identifiers from an expression string.
+ * Skips member-access properties (after `.`), string literals, and reserved names.
+ */
+const extractIdentifiers = (expr: string): string[] => {
+  const cleaned = expr.replace(/'[^']*'|"[^"]*"|`[^`]*`/g, '');
+  const tokenRegex = /\.?[a-zA-Z_$][a-zA-Z0-9_$]*/g;
+  const ids = new Set<string>();
+  let m;
+  while ((m = tokenRegex.exec(cleaned)) !== null) {
+    const token = m[0];
+    if (token.startsWith('.')) continue;
+    if (!RESERVED_NAMES.has(token)) ids.add(token);
+  }
+  return Array.from(ids);
+};
+
+const updateVariablesFromText = (text: string, variables: Record<string, string>): boolean => {
+  // Find all {...} blocks and extract user-defined identifiers from each
+  const blockRegex = /\{([^{}]+)\}/g;
+  const allVarNames = new Set<string>();
+  let blockMatch;
+  while ((blockMatch = blockRegex.exec(text)) !== null) {
+    for (const id of extractIdentifiers(blockMatch[1])) {
+      allVarNames.add(id);
     }
-    // Remove any that no longer exist
-    Object.keys(variables).forEach((variableName) => {
-      if (!matches.includes('{' + variableName + '}')) {
-        delete variables[variableName];
-        changed = true;
-      }
-    });
-  } else {
-    // No matches at all, so clear all variables
-    Object.keys(variables).forEach((variableName) => {
-      delete variables[variableName];
-      changed = true;
-    });
   }
 
+  let changed = false;
+  for (const varName of allVarNames) {
+    if (!(varName in variables)) {
+      variables[varName] = varName.toUpperCase();
+      changed = true;
+    }
+  }
+  for (const varName of Object.keys(variables)) {
+    if (!allVarNames.has(varName)) {
+      delete variables[varName];
+      changed = true;
+    }
+  }
   return changed;
 };

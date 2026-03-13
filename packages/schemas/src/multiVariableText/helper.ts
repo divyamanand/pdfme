@@ -1,42 +1,37 @@
+import { replacePlaceholders } from '@pdfme/common';
 import { MultiVariableTextSchema } from './types.js';
 
 export const substituteVariables = (
   text: string,
   variablesIn: string | Record<string, string>,
+  extraContext?: Record<string, unknown>,
 ): string => {
   if (!text) {
     return '';
   }
 
-  let substitutedText = text;
-
-  if (variablesIn) {
-    let variables: Record<string, string>;
-    try {
-      variables =
-        typeof variablesIn === 'string'
-          ? (JSON.parse(variablesIn || '{}') as Record<string, string>)
-          : variablesIn;
-    } catch {
-      throw new SyntaxError(`[@pdfme/schemas] MVT: invalid JSON string '${variablesIn as string}'`);
-    }
-
-    Object.keys(variables).forEach((variableName) => {
-      // handle special characters in variable name
-      const variableForRegex = variableName.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
-      const regex = new RegExp('\\{' + variableForRegex + '\\}', 'g');
-      substitutedText = substitutedText.replace(regex, variables[variableName]);
-    });
+  let variables: Record<string, string>;
+  try {
+    variables =
+      typeof variablesIn === 'string'
+        ? (JSON.parse(variablesIn || '{}') as Record<string, string>)
+        : variablesIn;
+  } catch {
+    throw new SyntaxError(`[@pdfme/schemas] MVT: invalid JSON string '${variablesIn as string}'`);
   }
 
-  // Remove any variables that were not substituted from inputs
-  substitutedText = substitutedText.replace(/{[^{}]+}/g, '');
+  // Merge extra context (e.g. currentPage, totalPages) with user variables
+  // System context takes precedence over user variables
+  const merged = extraContext ? { ...variables, ...extraContext } : variables;
 
-  return substitutedText;
+  // Use the full JS expression evaluator — supports {varName}, {expr * 2}, {str.toUpperCase()}, etc.
+  const result = replacePlaceholders({ content: text, variables: merged, schemas: [] });
+  // Strip any remaining unresolved {placeholders} for clean output
+  return result.replace(/\{[^{}]+\}/g, '');
 };
 
 export const validateVariables = (value: string, schema: MultiVariableTextSchema): boolean => {
-  if (schema.variables.length === 0) {
+  if (!schema.variables || schema.variables.length === 0) {
     return true;
   }
 
@@ -56,7 +51,6 @@ export const validateVariables = (value: string, schema: MultiVariableTextSchema
           `[@pdfme/generator] variable ${variable} is missing for field ${schema.name}`,
         );
       }
-      // If not required, then simply don't render this field if an input is missing
       return false;
     }
   }

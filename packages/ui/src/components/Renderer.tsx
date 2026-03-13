@@ -99,7 +99,7 @@ const Wrapper = ({
 );
 
 const Renderer = (props: RendererProps) => {
-  const { schema, basePdf, value, mode, onChange, stopEditing, tabIndex, placeholder, scale } =
+  const { schema, basePdf, value, mode, onChange, stopEditing, tabIndex, placeholder, scale, pageContext } =
     props;
 
   const pluginsRegistry = useContext(PluginsRegistry);
@@ -140,6 +140,7 @@ const Renderer = (props: RendererProps) => {
       theme,
       i18n,
       scale,
+      pageContext,
       _cache,
     });
 

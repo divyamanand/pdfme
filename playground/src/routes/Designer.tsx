@@ -269,7 +269,7 @@ function DesignerApp() {
     },
     // --- Divider ---
     { label: "", content: <div className="h-5 w-px bg-gray-300" /> },
-    // --- Reset + View Sample ---
+    // --- Reset + View Sample + Download Template ---
     {
       label: "",
       content: (
@@ -281,6 +281,19 @@ function DesignerApp() {
               await generatePDF(designer.current);
               toast.info(`Generated in ${Math.round(performance.now() - t0)}ms`);
             }}>View Sample</button>
+          <button disabled={dis} className={btn("bg-blue-50 border-blue-400")}
+            onClick={() => {
+              if (!designer.current) return;
+              const t = designer.current.getTemplate();
+              const blob = new Blob([JSON.stringify(t, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `template-${Date.now()}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.info("Template downloaded");
+            }}>Download Template</button>
         </div>
       ),
     },

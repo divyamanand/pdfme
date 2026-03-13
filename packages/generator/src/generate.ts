@@ -112,6 +112,7 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
             pdfDoc,
             page,
             options,
+            pageContext: { currentPage: j + 1, totalPages: basePages.length },
             _cache,
           };
           await render(staticRenderProps);
@@ -152,6 +153,7 @@ const generate = async (props: GenerateProps): Promise<Uint8Array<ArrayBuffer>> 
           pdfDoc,
           page,
           options,
+          pageContext: { currentPage: j + 1, totalPages: basePages.length },
           _cache,
         };
         await render(renderProps);

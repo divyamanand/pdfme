@@ -73,6 +73,7 @@ const TemplateEditor = ({
   const [zoomLevel, setZoomLevel] = useState(options.zoomLevel ?? 1);
   const [sidebarOpen, setSidebarOpen] = useState(options.sidebarOpen ?? true);
   const [prevTemplate, setPrevTemplate] = useState<Template | null>(null);
+  const [currentBasePdf, setCurrentBasePdf] = useState(template.basePdf);
 
   const { backgrounds, pageSizes, scale, error, refresh } = useUIPreProcessor({
     template,
@@ -122,7 +123,7 @@ const TemplateEditor = ({
       const _schemasList = cloneDeep(schemasList);
       _schemasList[pageCursor] = newSchemas;
       setSchemasList(_schemasList);
-      onChangeTemplate(schemasList2template(_schemasList, template.basePdf));
+      onChangeTemplate(schemasList2template(_schemasList, currentBasePdf));
     },
     [template, schemasList, pageCursor, onChangeTemplate],
   );
@@ -140,13 +141,13 @@ const TemplateEditor = ({
       _changeSchemas({
         objs,
         schemas: schemasList[pageCursor],
-        basePdf: template.basePdf,
+        basePdf: currentBasePdf,
         pluginsRegistry,
         pageSize: pageSizes[pageCursor],
         commitSchemas,
       });
     },
-    [commitSchemas, pageCursor, schemasList, pluginsRegistry, pageSizes, template.basePdf],
+    [commitSchemas, pageCursor, schemasList, pluginsRegistry, pageSizes, currentBasePdf],
   );
 
   useInitEvents({
@@ -177,8 +178,8 @@ const TemplateEditor = ({
   }, []);
 
   const addSchema = (defaultSchema: Schema) => {
-    const [paddingTop, paddingRight, paddingBottom, paddingLeft] = isBlankPdf(template.basePdf)
-      ? template.basePdf.padding
+    const [paddingTop, paddingRight, paddingBottom, paddingLeft] = isBlankPdf(currentBasePdf)
+      ? currentBasePdf.padding
       : [0, 0, 0, 0];
     const pageSize = pageSizes[pageCursor];
 
@@ -236,7 +237,7 @@ const TemplateEditor = ({
 
   const updatePage = async (sl: SchemaForUI[][], newPageCursor: number) => {
     setPageCursor(newPageCursor);
-    const newTemplate = schemasList2template(sl, template.basePdf);
+    const newTemplate = schemasList2template(sl, currentBasePdf);
     onChangeTemplate(newTemplate);
     await updateTemplate(newTemplate);
     void refresh(newTemplate);
@@ -277,21 +278,26 @@ const TemplateEditor = ({
   };
 
   const handleChangePageSize = (w: number, h: number) => {
-    if (!isBlankPdf(template.basePdf)) return;
-    const newBasePdf = { ...template.basePdf, width: w, height: h };
-    const newTemplate = { ...template, basePdf: newBasePdf };
+    if (!isBlankPdf(currentBasePdf)) return;
+    const newBasePdf = { ...currentBasePdf, width: w, height: h };
+    setCurrentBasePdf(newBasePdf);
+    const newTemplate = schemasList2template(schemasList, newBasePdf);
     onChangeTemplate(newTemplate);
+    void refresh(newTemplate);
   };
 
   const handleChangePadding = (padding: [number, number, number, number]) => {
-    if (!isBlankPdf(template.basePdf)) return;
-    const newBasePdf = { ...template.basePdf, padding };
-    const newTemplate = { ...template, basePdf: newBasePdf };
+    if (!isBlankPdf(currentBasePdf)) return;
+    const newBasePdf = { ...currentBasePdf, padding };
+    setCurrentBasePdf(newBasePdf);
+    const newTemplate = schemasList2template(schemasList, newBasePdf);
     onChangeTemplate(newTemplate);
+    void refresh(newTemplate);
   };
 
   if (prevTemplate !== template) {
     setPrevTemplate(template);
+    setCurrentBasePdf(currentBasePdf);
     void updateTemplate(template);
   }
 
@@ -306,7 +312,7 @@ const TemplateEditor = ({
     // Pass the error directly to ErrorScreen
     return <ErrorScreen size={size} error={error} />;
   }
-  const pageManipulation = isBlankPdf(template.basePdf)
+  const pageManipulation = isBlankPdf(currentBasePdf)
     ? {
         addPageAfter: handleAddPageAfter,
         removePage: handleRemovePage,
@@ -347,7 +353,7 @@ const TemplateEditor = ({
         <LeftSidebar
           height={canvasRef.current ? canvasRef.current.clientHeight : 0}
           scale={scale}
-          basePdf={template.basePdf}
+          basePdf={currentBasePdf}
         />
 
         <div style={{ position: 'absolute', width: canvasWidth, marginLeft: LEFT_SIDEBAR_WIDTH }}>
@@ -365,7 +371,7 @@ const TemplateEditor = ({
             }}
             zoomLevel={zoomLevel}
             setZoomLevel={setZoomLevel}
-            basePdf={template.basePdf}
+            basePdf={currentBasePdf}
             {...pageManipulation}
           />
 
@@ -375,7 +381,7 @@ const TemplateEditor = ({
             height={canvasRef.current ? canvasRef.current.clientHeight : 0}
             size={size}
             pageSize={pageSizes[pageCursor] ?? []}
-            basePdf={template.basePdf}
+            basePdf={currentBasePdf}
             activeElements={activeElements}
             schemasList={schemasList}
             schemas={schemasList[pageCursor] ?? []}
@@ -396,7 +402,7 @@ const TemplateEditor = ({
           <Canvas
             ref={canvasRef}
             paperRefs={paperRefs}
-            basePdf={template.basePdf}
+            basePdf={currentBasePdf}
             hoveringSchemaId={hoveringSchemaId}
             onChangeHoveringSchemaId={onChangeHoveringSchemaId}
             height={size.height - RULER_HEIGHT * ZOOM}
