@@ -36,4 +36,6 @@ export type {
   PluginRegistry,
   PdfmeProviderProps,
   DesignerContextValue,
+  TemplateVariable,
+  TemplateVariables,
 } from './types.js';

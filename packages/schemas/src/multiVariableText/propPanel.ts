@@ -1,6 +1,9 @@
 import { propPanel as parentPropPanel } from '../text/propPanel.js';
+import { createInsertVariableWidget } from '../insertVariableWidget.js';
 import { PropPanel, PropPanelWidgetProps } from '@pdfme/common';
 import { MultiVariableTextSchema } from './types.js';
+
+const insertVariableWidget = createInsertVariableWidget('text');
 
 const mapDynamicVariables = (props: PropPanelWidgetProps) => {
   const { rootElement, changeSchemas, activeSchema, i18n, options } = props;
@@ -87,6 +90,13 @@ export const propPanel: PropPanel<MultiVariableTextSchema> = {
     const parentSchema =
       typeof parentPropPanel.schema === 'function' ? parentPropPanel.schema(propPanelProps) : {};
     return {
+      insertVariablePicker: {
+        type: 'void',
+        widget: 'insertVariableWidget',
+        bind: false,
+        span: 24,
+      },
+      '----': { type: 'void', widget: 'Divider' },
       ...parentSchema,
       '-------': { type: 'void', widget: 'Divider' },
       dynamicVarContainer: {
@@ -118,7 +128,7 @@ export const propPanel: PropPanel<MultiVariableTextSchema> = {
       },
     };
   },
-  widgets: { ...(parentPropPanel.widgets || {}), mapDynamicVariables },
+  widgets: { ...(parentPropPanel.widgets || {}), mapDynamicVariables, insertVariableWidget },
   defaultSchema: {
     ...parentPropPanel.defaultSchema,
     readOnly: false,

@@ -26,10 +26,17 @@ export type {
   PluginRegistry,
 };
 
+export type TemplateVariable = { label: string; value: string };
+
+export type TemplateVariables = {
+  textVariables: TemplateVariable[];
+  imageVariables: TemplateVariable[];
+};
+
 export type PdfmeProviderProps = {
   template: Template;
   plugins: Record<string, Plugin>;
-  options?: UIOptions;
+  options?: UIOptions & { variables?: TemplateVariables };
   children: React.ReactNode;
 };
 

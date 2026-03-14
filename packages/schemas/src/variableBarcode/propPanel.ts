@@ -1,6 +1,7 @@
 import type { PropPanel, PropPanelWidgetProps } from '@pdfme/common';
 import type { VariableBarcodeSchema } from './types.js';
 import { updateVariablesFromText } from './helper.js';
+import { createInsertVariableWidget } from '../insertVariableWidget.js';
 import {
   DEFAULT_BARCODE_BG_COLOR,
   DEFAULT_BARCODE_COLOR,
@@ -100,8 +101,16 @@ export const getPropPanelByType = (type: BarcodeTypes): PropPanel<VariableBarcod
   updateVariablesFromText(defaultText, defaultVars);
   const { width, height } = defaultSizeByType[type] ?? { width: 40, height: 20 };
 
+  const insertVariableWidget = createInsertVariableWidget('text');
+
   return {
     schema: ({ i18n }) => ({
+      insertVariablePicker: {
+        type: 'void',
+        widget: 'insertVariableWidget',
+        bind: false,
+        span: 24,
+      },
       text: {
         title: 'Template',
         type: 'string',
@@ -159,7 +168,7 @@ export const getPropPanelByType = (type: BarcodeTypes): PropPanel<VariableBarcod
         },
       } : {}),
     }),
-    widgets: { mapVariableBarcodeVars },
+    widgets: { mapVariableBarcodeVars, insertVariableWidget },
     defaultSchema: {
       name: '',
       type,
