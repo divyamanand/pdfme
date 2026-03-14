@@ -1,33 +1,40 @@
 /* PropPanel Form Styling - Print Designer Theme */
+/* Fixed class names to match pdfme-designer DetailView structure and form-render v2 output */
 
-.pdfme-detail-view .frg-form {
+.pdfme-designer-detail-view {
   font-family: 'Open Sans', sans-serif;
 }
 
-/* Form fields container */
-.pdfme-detail-view .frg-form-item {
+/* Form container */
+.pdfme-designer-detail-view .fr-form {
+  font-family: 'Open Sans', sans-serif;
+}
+
+/* Form fields - antd .ant-form-item is the wrapper for each field */
+.pdfme-designer-detail-view .ant-form-item {
   margin-bottom: 12px;
 }
 
-.pdfme-detail-view .frg-label {
+.pdfme-designer-detail-view .ant-form-item-label > label {
   font-size: 13px;
   font-weight: 500;
   color: #323167;
   margin-bottom: 6px;
-  display: block;
 }
 
 /* Input fields */
-.pdfme-detail-view .ant-input,
-.pdfme-detail-view .ant-input-number,
-.pdfme-detail-view .ant-select,
-.pdfme-detail-view .ant-checkbox-wrapper {
+.pdfme-designer-detail-view .ant-input,
+.pdfme-designer-detail-view .ant-input-number,
+.pdfme-designer-detail-view .ant-select,
+.pdfme-designer-detail-view .ant-checkbox-wrapper,
+.pdfme-designer-detail-view textarea.ant-input {
   font-family: 'Open Sans', sans-serif;
   font-size: 13px;
 }
 
-.pdfme-detail-view .ant-input,
-.pdfme-detail-view .ant-input-number-input {
+.pdfme-designer-detail-view .ant-input,
+.pdfme-designer-detail-view .ant-input-number-input,
+.pdfme-designer-detail-view textarea.ant-input {
   height: 32px;
   border: 1px solid #E0E0E0;
   border-radius: 4px;
@@ -36,25 +43,31 @@
   transition: all 0.2s ease;
 }
 
-.pdfme-detail-view .ant-input:hover,
-.pdfme-detail-view .ant-input-number-input:hover {
+.pdfme-designer-detail-view textarea.ant-input {
+  height: auto;
+  min-height: 32px;
+}
+
+.pdfme-designer-detail-view .ant-input:hover,
+.pdfme-designer-detail-view .ant-input-number-input:hover {
   border-color: #999999;
 }
 
-.pdfme-detail-view .ant-input:focus,
-.pdfme-detail-view .ant-input-number-input:focus,
-.pdfme-detail-view .ant-input-focused,
-.pdfme-detail-view .ant-input-number-focused {
+.pdfme-designer-detail-view .ant-input:focus,
+.pdfme-designer-detail-view .ant-input-number-input:focus,
+.pdfme-designer-detail-view .ant-input-focused,
+.pdfme-designer-detail-view .ant-input-number-focused,
+.pdfme-designer-detail-view textarea.ant-input:focus {
   border-color: #323167;
   box-shadow: 0 0 0 2px rgba(50, 49, 103, 0.1);
 }
 
 /* Select dropdown */
-.pdfme-detail-view .ant-select {
+.pdfme-designer-detail-view .ant-select {
   width: 100%;
 }
 
-.pdfme-detail-view .ant-select-selector {
+.pdfme-designer-detail-view .ant-select-selector {
   border: 1px solid #E0E0E0 !important;
   border-radius: 4px !important;
   height: 32px !important;
@@ -63,60 +76,96 @@
   background: #ffffff !important;
 }
 
-.pdfme-detail-view .ant-select:hover .ant-select-selector {
+.pdfme-designer-detail-view .ant-select:hover .ant-select-selector {
   border-color: #999999 !important;
 }
 
-.pdfme-detail-view .ant-select-focused .ant-select-selector {
+.pdfme-designer-detail-view .ant-select-focused .ant-select-selector {
   border-color: #323167 !important;
   box-shadow: 0 0 0 2px rgba(50, 49, 103, 0.1) !important;
 }
 
+/* Switch (for table plugin showHead, barcode includetext, etc.) */
+.pdfme-designer-detail-view .ant-switch {
+  background: #d9d9d9;
+}
+
+.pdfme-designer-detail-view .ant-switch-checked {
+  background-color: #323167;
+}
+
 /* Checkbox */
-.pdfme-detail-view .ant-checkbox-wrapper {
+.pdfme-designer-detail-view .ant-checkbox-wrapper {
   color: #333333;
   font-size: 13px;
 }
 
-.pdfme-detail-view .ant-checkbox-inner {
+.pdfme-designer-detail-view .ant-checkbox-inner {
   border: 1px solid #E0E0E0;
   border-radius: 2px;
   width: 16px;
   height: 16px;
 }
 
-.pdfme-detail-view .ant-checkbox-checked .ant-checkbox-inner {
+.pdfme-designer-detail-view .ant-checkbox-checked .ant-checkbox-inner {
   background-color: #323167;
   border-color: #323167;
 }
 
 /* Color picker */
-.pdfme-detail-view .ant-color-picker {
+.pdfme-designer-detail-view .ant-color-picker {
   width: 100%;
 }
 
-.pdfme-detail-view .ant-color-picker-trigger {
+.pdfme-designer-detail-view .ant-color-picker-trigger {
   border: 1px solid #E0E0E0;
   border-radius: 4px;
   height: 32px;
   padding: 4px;
 }
 
+/* Card wrapper (for grouped fields - table plugin styles, etc.) */
+.pdfme-designer-detail-view .ant-card {
+  border: 1px solid #E0E0E0;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+.pdfme-designer-detail-view .ant-card-head {
+  background: #f8f8fc;
+  border-bottom: 1px solid #E0E0E0;
+  font-weight: 600;
+  font-size: 13px;
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.pdfme-designer-detail-view .ant-card-head-title {
+  color: #323167;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pdfme-designer-detail-view .ant-card-body {
+  padding: 12px;
+}
+
 /* Dividers */
-.pdfme-detail-view .ant-divider {
+.pdfme-designer-detail-view .ant-divider {
   margin: 12px 0;
   background-color: #E0E0E0;
   border-top: 1px solid #E0E0E0;
 }
 
-/* Button groups (Align widget) */
-.pdfme-detail-view .ant-space-compact {
+/* Button groups (Align widget, ButtonGroup widget) */
+.pdfme-designer-detail-view .ant-space-compact {
   display: flex;
   gap: 0;
   width: 100%;
 }
 
-.pdfme-detail-view .ant-space-compact > .ant-btn {
+.pdfme-designer-detail-view .ant-space-compact > .ant-btn {
   flex: 1;
   height: 32px;
   border: 1px solid #E0E0E0;
@@ -127,138 +176,81 @@
   transition: all 0.2s ease;
 }
 
-.pdfme-detail-view .ant-space-compact > .ant-btn:hover:not(:disabled) {
+.pdfme-designer-detail-view .ant-space-compact > .ant-btn:hover:not(:disabled) {
   color: #323167;
   border-color: #323167;
   background: #f5f5f5;
 }
 
-.pdfme-detail-view .ant-space-compact > .ant-btn-primary {
+.pdfme-designer-detail-view .ant-space-compact > .ant-btn-primary {
   background-color: #323167;
   border-color: #323167;
   color: #ffffff;
 }
 
-.pdfme-detail-view .ant-space-compact > .ant-btn-primary:hover {
+.pdfme-designer-detail-view .ant-space-compact > .ant-btn-primary:hover {
   background-color: #1a1a3d;
   border-color: #1a1a3d;
 }
 
-.pdfme-detail-view .ant-space-compact > .ant-btn:disabled {
+.pdfme-designer-detail-view .ant-space-compact > .ant-btn:disabled {
   color: #cccccc;
   border-color: #e8e8e8;
   background: #fafafa;
   cursor: not-allowed;
 }
 
-/* Form field layout - 2 column */
-.pdfme-detail-view .frg-form-item-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-}
-
-.pdfme-detail-view .frg-form-item-col-12 {
-  width: 100%;
-}
-
-.pdfme-detail-view .frg-form-item-col-8 {
-  width: calc(66.666% - 6px);
-  margin-right: 12px;
-}
-
-.pdfme-detail-view .frg-form-item-col-8:nth-child(3n) {
-  margin-right: 0;
-}
-
-.pdfme-detail-view .frg-form-item-col-6 {
-  width: calc(50% - 6px);
-  margin-right: 12px;
-}
-
-.pdfme-detail-view .frg-form-item-col-6:nth-child(even) {
-  margin-right: 0;
-}
-
-/* Card wrapper (for grouped fields) */
-.pdfme-detail-view .frg-form-item-card {
-  border: 1px solid #E0E0E0;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 12px;
-  background: #fafafa;
-}
-
-.pdfme-detail-view .frg-form-item-card .frg-label {
-  font-weight: 600;
-  color: #323167;
-  margin-bottom: 8px;
-}
-
 /* Error state */
-.pdfme-detail-view .ant-form-item-has-error .ant-input,
-.pdfme-detail-view .ant-form-item-has-error .ant-input-number-input,
-.pdfme-detail-view .ant-form-item-has-error .ant-select-selector {
+.pdfme-designer-detail-view .ant-form-item-has-error .ant-input,
+.pdfme-designer-detail-view .ant-form-item-has-error .ant-input-number-input,
+.pdfme-designer-detail-view .ant-form-item-has-error .ant-select-selector {
   border-color: #ff4d4f !important;
 }
 
-.pdfme-detail-view .ant-form-item-explain-error {
+.pdfme-designer-detail-view .ant-form-item-explain-error {
   color: #ff4d4f;
   font-size: 12px;
   margin-top: 4px;
 }
 
-/* Scrollbar styling */
-.pdfme-detail-view .ant-form-item-control-input {
-  overflow: auto;
+/* Extra/help text */
+.pdfme-designer-detail-view .ant-form-item-extra {
+  font-size: 12px;
+  color: #999999;
+  margin-top: 4px;
 }
 
-.pdfme-detail-view::-webkit-scrollbar {
+/* Scrollbar styling */
+.pdfme-designer-detail-view::-webkit-scrollbar {
   width: 6px;
 }
 
-.pdfme-detail-view::-webkit-scrollbar-track {
+.pdfme-designer-detail-view::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.pdfme-detail-view::-webkit-scrollbar-thumb {
+.pdfme-designer-detail-view::-webkit-scrollbar-thumb {
   background-color: #d0d0d0;
   border-radius: 3px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
-.pdfme-detail-view::-webkit-scrollbar-thumb:hover {
+.pdfme-designer-detail-view::-webkit-scrollbar-thumb:hover {
   background-color: #999999;
   background-clip: content-box;
 }
 
-/* Typography for labels and titles */
-.pdfme-detail-view .frg-form-item-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #323167;
-  margin-bottom: 8px;
-  text-transform: none;
-}
-
-/* Help text */
-.pdfme-detail-view .frg-form-item-help {
-  font-size: 12px;
-  color: #999999;
-  margin-top: 4px;
-}
-
 /* Input number spinner buttons */
-.pdfme-detail-view .ant-input-number-handler-wrap {
+.pdfme-designer-detail-view .ant-input-number-handler-wrap {
   background: #ffffff;
 }
 
-.pdfme-detail-view .ant-input-number-handler {
+.pdfme-designer-detail-view .ant-input-number-handler {
   border-color: #E0E0E0;
   color: #666666;
 }
 
-.pdfme-detail-view .ant-input-number-handler:hover {
+.pdfme-designer-detail-view .ant-input-number-handler:hover {
   color: #323167;
 }

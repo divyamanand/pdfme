@@ -91,6 +91,9 @@ const DetailView = (props: DetailViewProps) => {
 
   useEffect(() => {
     const values: Record<string, unknown> = { ...activeSchema };
+    // Exclude 'content' and 'id' to prevent JSON.parse errors on base64 data
+    delete values.content;
+    delete values.id;
     const readOnly = typeof values.readOnly === 'boolean' ? values.readOnly : false;
     values.editable = !readOnly;
     form.setValues(values);
@@ -203,12 +206,6 @@ const DetailView = (props: DetailViewProps) => {
   }
 
   const activePropPanelSchema = activePlugin.propPanel.schema;
-  const typeOptions: Array<{ label: string; value: string | undefined }> = [];
-
-  pluginsRegistry.entries().forEach(([label, plugin]) => {
-    typeOptions.push({ label, value: plugin.propPanel.defaultSchema?.type ?? undefined });
-  });
-
   const emptySchema: Record<string, unknown> = {};
 
   const defaultSchema: Record<string, unknown> = activePlugin?.propPanel?.defaultSchema
@@ -230,14 +227,6 @@ const DetailView = (props: DetailViewProps) => {
     type: 'object',
     column: 2,
     properties: {
-      type: {
-        title: typedI18n('type'),
-        type: 'string',
-        widget: 'select',
-        props: { options: typeOptions },
-        required: true,
-        span: 12,
-      },
       name: {
         title: typedI18n('fieldName'),
         type: 'string',
@@ -256,12 +245,6 @@ const DetailView = (props: DetailViewProps) => {
         type: 'boolean',
         span: 8,
         hidden: typeof defaultSchema.readOnly !== 'undefined',
-      },
-      required: {
-        title: typedI18n('required'),
-        type: 'boolean',
-        span: 16,
-        hidden: '{{!formData.editable}}',
       },
       '-': { type: 'void', widget: 'Divider' },
       align: { title: typedI18n('align'), type: 'void', widget: 'AlignWidget' },
