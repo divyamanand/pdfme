@@ -334,6 +334,22 @@ const DesignerStateManager = ({
     [currentBasePdf, schemasList, _onChangeTemplate, refresh],
   );
 
+  const handleChangeBasePdf = useCallback(
+    async (newBasePdf: Template['basePdf']) => {
+      setCurrentBasePdf(newBasePdf);
+      const newTemplate = schemasList2template(schemasList, newBasePdf);
+      // Wait for template2SchemasList to re-flow schemas based on new pageSizes
+      const sl = await template2SchemasList(newTemplate);
+      setSchemasList(sl);
+      // The fully updated template matching the correct page count
+      const reflowedTemplate = schemasList2template(sl, newBasePdf);
+
+      _onChangeTemplate(reflowedTemplate);
+      void refresh(reflowedTemplate);
+    },
+    [schemasList, _onChangeTemplate, refresh],
+  );
+
   // Detect external template changes — sync state derivation inline,
   // async work (updateTemplate) deferred to useEffect to avoid
   // "setState on unmounted component" warning.
@@ -416,6 +432,7 @@ const DesignerStateManager = ({
       clonePageAfter: handleClonePageAfter,
       handleChangePageSize,
       handleChangePadding,
+      handleChangeBasePdf,
 
       // Zoom & UI
       setZoomLevel,
@@ -442,7 +459,7 @@ const DesignerStateManager = ({
       commitSchemas, changeSchemas, removeSchemas, addSchema,
       onEdit, onEditEnd, onChangeHoveringSchemaId, onSortEnd,
       handleAddPageAfter, handleRemovePage, handleClonePageAfter,
-      handleChangePageSize, handleChangePadding,
+      handleChangePageSize, handleChangePadding, handleChangeBasePdf,
       getTemplate, updateTemplate, undo, redo,
     ],
   );

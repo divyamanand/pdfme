@@ -7,8 +7,16 @@ export type { PropPanelProps } from './PropPanel.js';
 export { SchemaList } from './SchemaList.js';
 export type { SchemaListProps } from './SchemaList.js';
 
-// Hook
+// Hooks
 export { useDesigner } from './useDesigner.js';
+export { useDesignerContext } from './useDesignerContext.js';
+
+// Utilities
+export { convertPdfToBase64 } from './utils.js';
+
+// Extra exports specifically for Print Designer
+export { generate } from '@pdfme/generator';
+export { getInputFromTemplate, getDefaultFont } from '@pdfme/common';
 
 // Plugins
 export { plugins } from './plugins.js';

@@ -1,3 +1,4 @@
+import './propPanel.css';
 import { useForm } from 'form-render';
 import React, { useRef, useContext, useState, useEffect, useCallback } from 'react';
 import type {
@@ -14,7 +15,7 @@ import { Menu } from 'lucide-react';
 import { I18nContext, PluginsRegistry, OptionsContext } from '../../../../contexts.js';
 import { debounce } from '../../../../helper.js';
 import { DESIGNER_CLASSNAME } from '../../../../constants.js';
-import { theme, Typography, Button, Divider } from 'antd';
+import { Button, Divider, theme } from 'antd';
 import AlignWidget from './AlignWidget.js';
 import WidgetRenderer from './WidgetRenderer.js';
 import ButtonGroupWidget from './ButtonGroupWidget.js';
@@ -23,8 +24,6 @@ import { SidebarBody, SidebarFrame, SidebarHeader, SIDEBAR_H_PADDING_PX } from '
 
 // Import FormRender as a default import
 import FormRenderComponent from 'form-render';
-
-const { Text } = Typography;
 
 type DetailViewProps = Pick<
   SidebarProps,
@@ -53,7 +52,6 @@ const DetailView = (props: DetailViewProps) => {
   // Define a type-safe i18n function that accepts string keys
   const typedI18n = useCallback(
     (key: string): string => {
-      // Use a type assertion to handle the union type constraint
       return typeof i18n === 'function' ? i18n(key as keyof Dict) : key;
     },
     [i18n],
@@ -67,7 +65,7 @@ const DetailView = (props: DetailViewProps) => {
     const newWidgets: typeof widgets = {
       AlignWidget: (p) => <AlignWidget {...p} {...props} options={options} />,
       Divider: () => (
-        <Divider style={{ marginTop: token.marginXS, marginBottom: token.marginXS }} />
+        <Divider style={{ marginTop: '12px', marginBottom: '12px', marginLeft: `-${SIDEBAR_H_PADDING_PX}px`, marginRight: `-${SIDEBAR_H_PADDING_PX}px`, backgroundColor: '#E0E0E0' }} />
       ),
       ButtonGroup: (p) => <ButtonGroupWidget {...p} {...props} options={options} />,
     };
@@ -92,9 +90,7 @@ const DetailView = (props: DetailViewProps) => {
   useEffect(() => form.resetFields(), [activeSchema.id]);
 
   useEffect(() => {
-    // Create a type-safe copy of the schema with editable property
     const values: Record<string, unknown> = { ...activeSchema };
-    // Safely access and set properties
     const readOnly = typeof values.readOnly === 'boolean' ? values.readOnly : false;
     values.editable = !readOnly;
     form.setValues(values);
@@ -113,22 +109,17 @@ const DetailView = (props: DetailViewProps) => {
     };
   }, [schemasList, activeSchema]);
 
-  // Reference to a function that validates schema name uniqueness
   const uniqueSchemaName = useRef(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     (_unused: string): boolean => true,
   );
 
-  // Use proper type for validator function parameter
   const validateUniqueSchemaName = (_: unknown, value: string): boolean =>
     uniqueSchemaName.current(value);
 
-  // Calculate padding values once
   const [paddingTop, paddingRight, paddingBottom, paddingLeft] = isBlankPdf(basePdf)
     ? basePdf.padding
     : [0, 0, 0, 0];
 
-  // Cross-field validation: only checks when both fields are individually valid
   const validatePosition = (_: unknown, value: number, fieldName: string): boolean => {
     const formValues = form.getValues() as Record<string, unknown>;
     const position = formValues.position as { x: number; y: number } | undefined;
@@ -154,7 +145,6 @@ const DetailView = (props: DetailViewProps) => {
     return true;
   };
 
-  // Use explicit type for debounce function that matches the expected signature
   const handleWatch = debounce(function (...args: unknown[]) {
     const formSchema = args[0] as Record<string, unknown>;
     const formAndSchemaValuesDiffer = (formValue: unknown, schemaValue: unknown): boolean => {
@@ -170,7 +160,6 @@ const DetailView = (props: DetailViewProps) => {
 
       let value = formSchema[key];
       if (formAndSchemaValuesDiffer(value, (activeSchema as Record<string, unknown>)[key])) {
-        // FIXME memo: https://github.com/pdfme/pdfme/pull/367#issuecomment-1857468274
         if (value === null && ['rotate', 'opacity'].includes(key)) {
           value = undefined;
         }
@@ -189,7 +178,6 @@ const DetailView = (props: DetailViewProps) => {
     }
 
     if (changes.length) {
-      // Only commit these schema changes if they have passed form validation
       form
         .validateFields()
         .then(() => changeSchemas(changes))
@@ -221,31 +209,23 @@ const DetailView = (props: DetailViewProps) => {
     typeOptions.push({ label, value: plugin.propPanel.defaultSchema?.type ?? undefined });
   });
 
-  // Create a safe empty schema as fallback
   const emptySchema: Record<string, unknown> = {};
 
-  // Safely access the default schema with proper null checking
   const defaultSchema: Record<string, unknown> = activePlugin?.propPanel?.defaultSchema
-    ? // Create a safe copy of the schema
-      (() => {
+    ? (() => {
         const result: Record<string, unknown> = {};
-
-        // Only copy properties that exist on the object
         for (const key in activePlugin.propPanel.defaultSchema) {
           if (Object.prototype.hasOwnProperty.call(activePlugin.propPanel.defaultSchema, key)) {
             result[key] = (activePlugin.propPanel.defaultSchema as Record<string, unknown>)[key];
           }
         }
-
         return result;
       })()
     : emptySchema;
 
-  // Calculate max values considering padding
   const maxWidth = pageSize.width - paddingLeft - paddingRight;
   const maxHeight = pageSize.height - paddingTop - paddingBottom;
 
-  // Create a type-safe schema object
   const propPanelSchema: PropPanelSchema = {
     type: 'object',
     column: 2,
@@ -369,11 +349,9 @@ const DetailView = (props: DetailViewProps) => {
     },
   };
 
-  // Create a safe copy of the properties
   const safeProperties = { ...propPanelSchema.properties };
 
   if (typeof activePropPanelSchema === 'function') {
-    // Create a new object without the schemasList property
     const { size, schemas, pageSize, changeSchemas, activeElements, deselectSchema, activeSchema } =
       props;
     const propPanelProps = {
@@ -386,7 +364,6 @@ const DetailView = (props: DetailViewProps) => {
       activeSchema,
     };
 
-    // Use the typedI18n function to avoid type issues
     const functionResult = activePropPanelSchema({
       ...propPanelProps,
       options,
@@ -394,31 +371,25 @@ const DetailView = (props: DetailViewProps) => {
       i18n: typedI18n,
     });
 
-    // Safely handle the result
     const apps = functionResult && typeof functionResult === 'object' ? functionResult : {};
 
-    // Create a divider if needed
     const dividerObj =
       Object.keys(apps).length === 0 ? {} : { '--': { type: 'void', widget: 'Divider' } };
 
-    // Assign properties safely - use type assertion to satisfy TypeScript
     propPanelSchema.properties = {
       ...safeProperties,
       ...(dividerObj as Record<string, Partial<Schema>>),
       ...(apps as Record<string, Partial<Schema>>),
     };
   } else {
-    // Handle non-function case
     const apps =
       activePropPanelSchema && typeof activePropPanelSchema === 'object'
         ? activePropPanelSchema
         : {};
 
-    // Create a divider if needed
     const dividerObj =
       Object.keys(apps).length === 0 ? {} : { '--': { type: 'void', widget: 'Divider' } };
 
-    // Assign properties safely - use type assertion to satisfy TypeScript
     propPanelSchema.properties = {
       ...safeProperties,
       ...(dividerObj as Record<string, Partial<Schema>>),
@@ -441,22 +412,45 @@ const DetailView = (props: DetailViewProps) => {
             transform: 'translateY(-50%)',
             top: '50%',
             paddingTop: '3px',
+            background: 'none',
+            border: 'none',
+            color: '#323167',
+            padding: '4px',
+            minWidth: '32px',
+            height: '32px',
           }}
           onClick={deselectSchema}
           icon={<Menu strokeWidth={1.5} size={20} />}
         />
-        <Text strong style={{ textAlign: 'center', width: '100%' }}>
+        <div
+          style={{
+            textAlign: 'center',
+            width: '100%',
+            fontSize: '14px',
+            fontWeight: 600,
+            color: '#323167',
+            fontFamily: "'Open Sans', sans-serif",
+          }}
+        >
           {typedI18n('editField')}
-        </Text>
+        </div>
       </SidebarHeader>
       <SidebarBody>
-        <FormRenderComponent
-          form={form}
-          schema={propPanelSchema}
-          widgets={widgets}
-          watch={{ '#': handleWatch }}
-          locale="en-US"
-        />
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}
+        >
+          <FormRenderComponent
+            form={form}
+            schema={propPanelSchema}
+            widgets={widgets}
+            watch={{ '#': handleWatch }}
+            locale="en-US"
+          />
+        </div>
       </SidebarBody>
     </SidebarFrame>
   );

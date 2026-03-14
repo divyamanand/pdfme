@@ -72,6 +72,7 @@ export type DesignerContextValue = {
   clonePageAfter: () => void;
   handleChangePageSize: (w: number, h: number) => void;
   handleChangePadding: (padding: [number, number, number, number]) => void;
+  handleChangeBasePdf: (basePdf: BasePdf) => void;
 
   // Zoom & UI
   setZoomLevel: (level: number) => void;
