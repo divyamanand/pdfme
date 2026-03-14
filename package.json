@@ -28,7 +28,8 @@
     "packages/schemas",
     "packages/generator",
     "packages/manipulator",
-    "packages/ui"
+    "packages/ui",
+    "packages/react"
   ],
   "scripts": {
     "postinstall": "./scripts/link-workspaces.sh",
@@ -48,6 +49,7 @@
     "build:generator": "npm run -w packages/generator build",
     "build:manipulator": "npm run -w packages/manipulator build",
     "build:ui": "npm run -w packages/ui build",
+    "build:react": "npm run -w packages/react build",
     "test": "npm run test --workspaces",
     "test:ui:update-snapshots": "npm run -w packages/ui test -- -u",
     "lint": "npm run lint --workspaces",
