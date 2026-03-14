@@ -2,6 +2,7 @@ import multiVariableText from './multiVariableText/index.js';
 import text from './text/index.js';
 import image from './graphics/image.js';
 import svg from './graphics/svg.js';
+import { signature } from './graphics/signature.js';
 import barcodes from './barcodes/index.js';
 import line from './shapes/line.js';
 import table from './tables/index.js';
@@ -24,6 +25,7 @@ export {
   multiVariableText,
   image,
   svg,
+  signature,
   table,
   barcodes,
   line,

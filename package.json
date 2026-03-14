@@ -81,5 +81,8 @@
     "ts-loader": "^9.5.4",
     "ts-prune": "^0.10.3",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "signature_pad": "^4.2.0"
   }
 }

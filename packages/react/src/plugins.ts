@@ -1,6 +1,7 @@
 import {
   multiVariableText,
   image,
+  signature,
   line,
   rectangle,
   ellipse,
@@ -13,6 +14,7 @@ import {
 export const plugins: Record<string, any> = {
   Text: multiVariableText,
   Image: image,
+  Signature: signature,
   Table: dynamicTable,
   Line: line,
   Rectangle: rectangle,
