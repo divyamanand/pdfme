@@ -52,6 +52,35 @@ export const getDefaultFont = (): Font => ({
   [DEFAULT_FONT_NAME]: { data: b64toUint8Array(DEFAULT_FONT_VALUE), fallback: true },
 });
 
+export const getBuiltinFontsData = (): Font => ({
+  Arial: { fallback: false, data: '/fonts/Arial/Arial.ttf' },
+  'Arial Black': { fallback: false, data: '/fonts/Arial/ArialBlack.ttf' },
+  'Arial Bold': { fallback: false, data: '/fonts/Arial/ArialBold.ttf' },
+  'Arial Bold Italic': { fallback: false, data: '/fonts/Arial/ArialBoldItalic.ttf' },
+  'Arial Italic': { fallback: false, data: '/fonts/Arial/ArialItalic.TTF' },
+  'Arial Unicode MS': { fallback: false, data: '/fonts/ArialUnicodeMS/ArialUnicodeMS.otf' },
+  'Arial Unicode MS Bold': { fallback: false, data: '/fonts/ArialUnicodeMS/ArialUnicodeMSBold.otf' },
+  'Avenir Book': { fallback: false, data: '/fonts/AvenirBook/AvenirBook.ttf' },
+  'Baroque Antique Script': { fallback: false, data: '/fonts/BaroqueAntiqueScript/BaroqueAntiqueScript.ttf' },
+  Calibri: { fallback: false, data: '/fonts/CalibriFontFamily/CalibriRegular.ttf' },
+  'Calibri Bold': { fallback: false, data: '/fonts/CalibriFontFamily/CalibriBold.ttf' },
+  'Calibri Italic': { fallback: false, data: '/fonts/CalibriFontFamily/CalibriItalic.ttf' },
+  'Calibri Bold Italic': { fallback: false, data: '/fonts/CalibriFontFamily/CalibriBoldItalic.ttf' },
+  'Gelato Script': { fallback: false, data: '/fonts/GelatoScript/GelatoScript.ttf' },
+  'ITC Tempus': { fallback: false, data: '/fonts/ITCTempus/ITCTempus.ttf' },
+  'Lucida Calligraphy': { fallback: false, data: '/fonts/LucidaCalligraphy/LucidaCalligraphy.ttf' },
+  'Monotype Corsiva': { fallback: false, data: '/fonts/MonotypeCorsiva/MonotypeCorsivaRegular.ttf' },
+  'Monotype Corsiva Bold': { fallback: false, data: '/fonts/MonotypeCorsiva/MonotypeCorsivaBold.ttf' },
+  'Monotype Corsiva Italic': { fallback: false, data: '/fonts/MonotypeCorsiva/MonotypeCorsivaRegularItalic.ttf' },
+  'Monotype Corsiva Bold Italic': { fallback: false, data: '/fonts/MonotypeCorsiva/MonotypeCorsivaBoldItalic.ttf' },
+  'Rumble Brave': { fallback: false, data: '/fonts/RumbleBrave/RumbleBrave.otf' },
+  Tahoma: { fallback: false, data: '/fonts/Tahoma/Tahoma.ttf' },
+  'Times New Roman': { fallback: false, data: '/fonts/TimesNewRoman/TimesNewRoman.ttf' },
+  'Times New Roman Bold': { fallback: false, data: '/fonts/TimesNewRoman/TimesNewRomanBold.ttf' },
+  'Times New Roman Italic': { fallback: false, data: '/fonts/TimesNewRoman/TimesNewRomanItalic.ttf' },
+  'Times New Roman Bold Italic': { fallback: false, data: '/fonts/TimesNewRoman/TimesNewRomanBoldItalic.ttf' },
+});
+
 export const mm2pt = (mm: number): number => {
   return parseFloat(String(mm)) * MM_TO_PT_RATIO;
 };

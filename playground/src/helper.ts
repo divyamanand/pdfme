@@ -1,4 +1,4 @@
-import { Template, Font, checkTemplate, getInputFromTemplate, getDefaultFont } from '@pdfme/common';
+import { Template, Font, checkTemplate, getInputFromTemplate, getDefaultFont, getBuiltinFontsData } from '@pdfme/common';
 import { Designer } from '@pdfme/ui';
 import { generate } from '@pdfme/generator';
 import { getPlugins } from './plugins';
@@ -12,6 +12,7 @@ export function fromKebabCase(str: string): string {
 
 export const getFontsData = (): Font => ({
   ...getDefaultFont(),
+  ...getBuiltinFontsData(),
   'PinyonScript-Regular': {
     fallback: false,
     data: 'https://fonts.gstatic.com/s/pinyonscript/v22/6xKpdSJbL9-e9LuoeQiDRQR8aOLQO4bhiDY.ttf',
@@ -23,7 +24,7 @@ export const getFontsData = (): Font => ({
   NotoSansJP: {
     fallback: false,
     data: 'https://fonts.gstatic.com/s/notosansjp/v53/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75vY0rw-oME.ttf',
-  }
+  },
 });
 
 export const readFile = (file: File | null, type: 'text' | 'dataURL' | 'arrayBuffer') => {
