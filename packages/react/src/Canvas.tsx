@@ -1,6 +1,6 @@
 import React, { useContext, useCallback } from 'react';
 import { DndContext, DragEndEvent } from '@dnd-kit/core';
-import { Schema, px2mm, ZOOM } from '@pdfme/common';
+import { Schema, px2mm, ZOOM, isBlankPdf } from '@pdfme/common';
 import { DesignerContext } from './PdfmeProvider.js';
 import InternalCanvas from '../../ui/src/components/Designer/Canvas/index.js';
 import LeftSidebar from '../../ui/src/components/Designer/LeftSidebar.js';
@@ -71,6 +71,9 @@ export const Canvas = ({
     setSidebarOpen,
   } = ctx;
 
+  // Gate page manipulation to blank PDFs only
+  const blankPdfOnly = isBlankPdf(currentBasePdf);
+
   // Always reserve space for the right sidebar so the canvas never shifts
   const leftSidebarWidth = hideLeftSidebar ? 0 : LEFT_SIDEBAR_WIDTH;
   const canvasWidth = size.width - leftSidebarWidth;
@@ -138,12 +141,12 @@ export const Canvas = ({
                 setPageCursor={setPageCursor}
                 zoomLevel={zoomLevel}
                 setZoomLevel={setZoomLevel}
-                addPageAfter={addPageAfter}
-                removePage={removePage}
-                clonePageAfter={clonePageAfter}
+                addPageAfter={blankPdfOnly ? addPageAfter : undefined}
+                removePage={blankPdfOnly ? removePage : undefined}
+                clonePageAfter={blankPdfOnly ? clonePageAfter : undefined}
                 basePdf={currentBasePdf}
-                onChangePageSize={handleChangePageSize}
-                onChangePadding={handleChangePadding}
+                onChangePageSize={blankPdfOnly ? handleChangePageSize : undefined}
+                onChangePadding={blankPdfOnly ? handleChangePadding : undefined}
               />
             )}
 
