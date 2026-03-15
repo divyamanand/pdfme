@@ -1,4 +1,4 @@
-import { Template, Font, checkTemplate, getInputFromTemplate, getDefaultFont, getBuiltinFontsData } from '@pdfme/common';
+import { Template, Font, checkTemplate, getInputFromTemplate, getAllFonts } from '@pdfme/common';
 import { Designer } from '@pdfme/ui';
 import { generate } from '@pdfme/generator';
 import { getPlugins } from './plugins';
@@ -11,8 +11,7 @@ export function fromKebabCase(str: string): string {
 }
 
 export const getFontsData = (): Font => ({
-  ...getDefaultFont(),
-  ...getBuiltinFontsData(),
+  ...getAllFonts(),
   'PinyonScript-Regular': {
     fallback: false,
     data: 'https://fonts.gstatic.com/s/pinyonscript/v22/6xKpdSJbL9-e9LuoeQiDRQR8aOLQO4bhiDY.ttf',

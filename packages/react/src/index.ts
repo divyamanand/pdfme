@@ -16,7 +16,7 @@ export { convertPdfToBase64 } from './utils.js';
 
 // Extra exports specifically for Print Designer
 export { generate } from '@pdfme/generator';
-export { getInputFromTemplate, getDefaultFont } from '@pdfme/common';
+export { getInputFromTemplate, getDefaultFont, getBuiltinFontsData, getAllFonts } from '@pdfme/common';
 
 // Plugins
 export { plugins } from './plugins.js';

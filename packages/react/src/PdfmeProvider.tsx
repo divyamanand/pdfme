@@ -17,7 +17,7 @@ import {
   isBlankPdf,
   px2mm,
   pluginRegistry,
-  getDefaultFont,
+  getAllFonts,
 } from '@pdfme/common';
 import type { PdfmeProviderProps, DesignerContextValue } from './types.js';
 
@@ -482,7 +482,7 @@ export const PdfmeProvider = ({
   return (
     <AppContextProvider
       lang={options.lang || 'en'}
-      font={options.font || getDefaultFont()}
+      font={options.font || getAllFonts()}
       plugins={registry}
       options={options}
     >
