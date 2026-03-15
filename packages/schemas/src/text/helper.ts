@@ -123,7 +123,8 @@ export const getFontKitFont = async (
   const currentFont = font[fntNm] || getFallbackFont(font) || getDefaultFont()[DEFAULT_FONT_NAME];
   let fontData = currentFont.data;
   if (typeof fontData === 'string') {
-    fontData = fontData.startsWith('http')
+    const isUrl = fontData.startsWith('http') || fontData.startsWith('/') || fontData.startsWith('./');
+    fontData = isUrl
       ? await fetch(fontData).then((res) => res.arrayBuffer())
       : b64toUint8Array(fontData);
   }
