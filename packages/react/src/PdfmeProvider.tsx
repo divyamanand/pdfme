@@ -478,11 +478,12 @@ export const PdfmeProvider = ({
   children,
 }: PdfmeProviderProps) => {
   const registry = useMemo(() => pluginRegistry(plugins), [plugins]);
+  const font = useMemo(() => options.font || getAllFonts(), [options.font]);
 
   return (
     <AppContextProvider
       lang={options.lang || 'en'}
-      font={options.font || getAllFonts()}
+      font={font}
       plugins={registry}
       options={options}
     >

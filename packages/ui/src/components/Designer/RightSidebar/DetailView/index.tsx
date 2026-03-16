@@ -1,6 +1,6 @@
 import './propPanel.css';
 import { useForm } from 'form-render';
-import React, { useRef, useContext, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type {
   Dict,
   ChangeSchemaItem,
@@ -61,6 +61,11 @@ const DetailView = (props: DetailViewProps) => {
     [key: string]: (props: PropPanelWidgetProps) => React.JSX.Element;
   }>({});
 
+  const optionsKey = useMemo(
+    () => Object.keys(options.font || {}).join(','),
+    [options],
+  );
+
   useEffect(() => {
     const newWidgets: typeof widgets = {
       AlignWidget: (p) => <AlignWidget {...p} {...props} options={options} />,
@@ -85,7 +90,7 @@ const DetailView = (props: DetailViewProps) => {
       });
     }
     setWidgets(newWidgets);
-  }, [activeSchema, pluginsRegistry, JSON.stringify(options)]);
+  }, [activeSchema, pluginsRegistry, optionsKey]);
 
   useEffect(() => form.resetFields(), [activeSchema.id]);
 

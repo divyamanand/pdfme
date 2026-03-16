@@ -49,41 +49,58 @@ export const getFallbackFontName = (font: Font) => {
   return fallbackFontName;
 };
 
-export const getDefaultFont = (): Font => ({
-  [DEFAULT_FONT_NAME]: { data: b64toUint8Array(DEFAULT_FONT_VALUE), fallback: true },
-});
+// Module-level caches for fonts to avoid repeated base64 decoding
+let _defaultFontCache: Font | null = null;
+let _builtinFontsDataCache: Font | null = null;
+let _allFontsCache: Font | null = null;
 
-export const getBuiltinFontsData = (): Font => ({
-  Arial: { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_FONT_VALUE) },
-  'Arial Black': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_BLACK_FONT_VALUE) },
-  'Arial Bold': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_BOLD_FONT_VALUE) },
-  'Arial Bold Italic': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_BOLD_ITALIC_FONT_VALUE) },
-  'Arial Italic': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_ITALIC_FONT_VALUE) },
-  'Avenir Book': { fallback: false, data: b64toUint8Array(FontData.AVENIR_BOOK_AVENIR_BOOK_FONT_VALUE) },
-  'Baroque Antique Script': { fallback: false, data: b64toUint8Array(FontData.BAROQUE_ANTIQUE_SCRIPT_BAROQUE_ANTIQUE_SCRIPT_FONT_VALUE) },
-  Calibri: { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_REGULAR_FONT_VALUE) },
-  'Calibri Bold': { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_BOLD_FONT_VALUE) },
-  'Calibri Italic': { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_ITALIC_FONT_VALUE) },
-  'Calibri Bold Italic': { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_BOLD_ITALIC_FONT_VALUE) },
-  'Gelato Script': { fallback: false, data: b64toUint8Array(FontData.GELATO_SCRIPT_GELATO_SCRIPT_FONT_VALUE) },
-  'ITC Tempus': { fallback: false, data: b64toUint8Array(FontData.I_T_C_TEMPUS_I_T_C_TEMPUS_FONT_VALUE) },
-  'Lucida Calligraphy': { fallback: false, data: b64toUint8Array(FontData.LUCIDA_CALLIGRAPHY_LUCIDA_CALLIGRAPHY_FONT_VALUE) },
-  'Monotype Corsiva': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_REGULAR_FONT_VALUE) },
-  'Monotype Corsiva Bold': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_BOLD_FONT_VALUE) },
-  'Monotype Corsiva Italic': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_REGULAR_ITALIC_FONT_VALUE) },
-  'Monotype Corsiva Bold Italic': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_BOLD_ITALIC_FONT_VALUE) },
-  'Rumble Brave': { fallback: false, data: b64toUint8Array(FontData.RUMBLE_BRAVE_RUMBLE_BRAVE_FONT_VALUE) },
-  Tahoma: { fallback: false, data: b64toUint8Array(FontData.TAHOMA_TAHOMA_FONT_VALUE) },
-  'Times New Roman': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_FONT_VALUE) },
-  'Times New Roman Bold': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_BOLD_FONT_VALUE) },
-  'Times New Roman Italic': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_ITALIC_FONT_VALUE) },
-  'Times New Roman Bold Italic': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_BOLD_ITALIC_FONT_VALUE) },
-});
+export const getDefaultFont = (): Font => {
+  if (!_defaultFontCache) {
+    _defaultFontCache = {
+      [DEFAULT_FONT_NAME]: { data: b64toUint8Array(DEFAULT_FONT_VALUE), fallback: true },
+    };
+  }
+  return _defaultFontCache;
+};
 
-export const getAllFonts = (): Font => ({
-  ...getDefaultFont(),
-  ...getBuiltinFontsData(),
-});
+export const getBuiltinFontsData = (): Font => {
+  if (!_builtinFontsDataCache) {
+    _builtinFontsDataCache = {
+      Arial: { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_FONT_VALUE) },
+      'Arial Black': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_BLACK_FONT_VALUE) },
+      'Arial Bold': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_BOLD_FONT_VALUE) },
+      'Arial Bold Italic': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_BOLD_ITALIC_FONT_VALUE) },
+      'Arial Italic': { fallback: false, data: b64toUint8Array(FontData.ARIAL_ARIAL_ITALIC_FONT_VALUE) },
+      'Avenir Book': { fallback: false, data: b64toUint8Array(FontData.AVENIR_BOOK_AVENIR_BOOK_FONT_VALUE) },
+      'Baroque Antique Script': { fallback: false, data: b64toUint8Array(FontData.BAROQUE_ANTIQUE_SCRIPT_BAROQUE_ANTIQUE_SCRIPT_FONT_VALUE) },
+      Calibri: { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_REGULAR_FONT_VALUE) },
+      'Calibri Bold': { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_BOLD_FONT_VALUE) },
+      'Calibri Italic': { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_ITALIC_FONT_VALUE) },
+      'Calibri Bold Italic': { fallback: false, data: b64toUint8Array(FontData.CALIBRI_CALIBRI_BOLD_ITALIC_FONT_VALUE) },
+      'Gelato Script': { fallback: false, data: b64toUint8Array(FontData.GELATO_SCRIPT_GELATO_SCRIPT_FONT_VALUE) },
+      'ITC Tempus': { fallback: false, data: b64toUint8Array(FontData.I_T_C_TEMPUS_I_T_C_TEMPUS_FONT_VALUE) },
+      'Lucida Calligraphy': { fallback: false, data: b64toUint8Array(FontData.LUCIDA_CALLIGRAPHY_LUCIDA_CALLIGRAPHY_FONT_VALUE) },
+      'Monotype Corsiva': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_REGULAR_FONT_VALUE) },
+      'Monotype Corsiva Bold': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_BOLD_FONT_VALUE) },
+      'Monotype Corsiva Italic': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_REGULAR_ITALIC_FONT_VALUE) },
+      'Monotype Corsiva Bold Italic': { fallback: false, data: b64toUint8Array(FontData.MONOTYPE_CORSIVA_MONOTYPE_CORSIVA_BOLD_ITALIC_FONT_VALUE) },
+      'Rumble Brave': { fallback: false, data: b64toUint8Array(FontData.RUMBLE_BRAVE_RUMBLE_BRAVE_FONT_VALUE) },
+      Tahoma: { fallback: false, data: b64toUint8Array(FontData.TAHOMA_TAHOMA_FONT_VALUE) },
+      'Times New Roman': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_FONT_VALUE) },
+      'Times New Roman Bold': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_BOLD_FONT_VALUE) },
+      'Times New Roman Italic': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_ITALIC_FONT_VALUE) },
+      'Times New Roman Bold Italic': { fallback: false, data: b64toUint8Array(FontData.TIMES_NEW_ROMAN_TIMES_NEW_ROMAN_BOLD_ITALIC_FONT_VALUE) },
+    };
+  }
+  return _builtinFontsDataCache;
+};
+
+export const getAllFonts = (): Font => {
+  if (!_allFontsCache) {
+    _allFontsCache = { ...getDefaultFont(), ...getBuiltinFontsData() };
+  }
+  return _allFontsCache;
+};
 
 export const mm2pt = (mm: number): number => {
   return parseFloat(String(mm)) * MM_TO_PT_RATIO;

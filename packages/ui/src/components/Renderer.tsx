@@ -38,13 +38,12 @@ type ReRenderCheckProps = {
 
 const useRerenderDependencies = (arg: ReRenderCheckProps) => {
   const { plugin, value, mode, scale, schema, options } = arg;
-  const _options = cloneDeep(options);
-  if (_options.font) {
-    Object.values(_options.font).forEach((fontObj) => {
-      (fontObj as { data: string }).data = '...';
-    });
-  }
-  const optionStr = JSON.stringify(_options);
+
+  const optionStr = useMemo(() => {
+    const { font, ...restOptions } = options;
+    const fontKeys = font ? Object.keys(font).join(',') : '';
+    return JSON.stringify({ ...restOptions, __fontKeys: fontKeys });
+  }, [options]);
 
   return useMemo(() => {
     if (plugin?.uninterruptedEditMode && mode === 'designer') {
