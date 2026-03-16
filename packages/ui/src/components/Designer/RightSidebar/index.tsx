@@ -7,7 +7,7 @@ const Sidebar = (props: SidebarProps) => {
   const { activeElements, schemas } = props;
 
   const getActiveSchemas = () =>
-    schemas.filter((s) => activeElements.map((ae) => ae.id).includes(s.id));
+    schemas.filter((s) => activeElements.filter(Boolean).map((ae) => ae.id).includes(s.id));
   const getLastActiveSchema = () => {
     const activeSchemas = getActiveSchemas();
     return activeSchemas[activeSchemas.length - 1];

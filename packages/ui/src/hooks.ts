@@ -267,7 +267,9 @@ export const useInitEvents = ({
           return Object.assign(cloneDeep(cs), { id, name, position });
         });
         commitSchemas(schemasList[pageCursor].concat(pasteSchemas));
-        onEdit(pasteSchemas.map((s) => document.getElementById(s.id)!));
+        setTimeout(() => {
+          onEdit(pasteSchemas.map((s) => document.getElementById(s.id)).filter(Boolean) as HTMLElement[]);
+        }, 0);
         copiedSchemas.current = pasteSchemas;
       },
       redo: () => timeTravel('redo'),

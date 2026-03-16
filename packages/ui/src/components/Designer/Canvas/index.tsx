@@ -328,7 +328,7 @@ const Canvas = (props: Props, ref: Ref<HTMLDivElement>) => {
 
   const rotatable = useMemo(() => {
     const selectedSchemas = (schemasList[pageCursor] || []).filter((s) =>
-      activeElements.map((ae) => ae.id).includes(s.id),
+      activeElements.filter(Boolean).map((ae) => ae.id).includes(s.id),
     );
     const schemaTypes = selectedSchemas.map((s) => s.type);
     const uniqueSchemaTypes = [...new Set(schemaTypes)];
