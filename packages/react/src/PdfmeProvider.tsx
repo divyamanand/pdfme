@@ -70,6 +70,7 @@ const DesignerStateManager = ({
   const [sidebarOpen, setSidebarOpen] = useState(options.sidebarOpen ?? true);
   const [prevTemplate, setPrevTemplate] = useState<Template | null>(null);
   const [currentBasePdf, setCurrentBasePdf] = useState(templateProp.basePdf);
+  const [renderTemplate, setRenderTemplate] = useState<Template>(templateProp);
   const [size, setSize] = useState<Size>({ width: 800, height: 600 });
 
   // Callback refs
@@ -94,7 +95,7 @@ const DesignerStateManager = ({
   }, []);
 
   const { backgrounds, pageSizes, scale, error, refresh } = useUIPreProcessor({
-    template: templateProp,
+    template: renderTemplate,
     size,
     zoomLevel,
     maxZoom,
@@ -344,6 +345,7 @@ const DesignerStateManager = ({
       // The fully updated template matching the correct page count
       const reflowedTemplate = schemasList2template(sl, newBasePdf);
 
+      setRenderTemplate(reflowedTemplate);
       _onChangeTemplate(reflowedTemplate);
       void refresh(reflowedTemplate);
     },
@@ -357,6 +359,7 @@ const DesignerStateManager = ({
   if (templateChanged) {
     setPrevTemplate(templateProp);
     setCurrentBasePdf(templateProp.basePdf);
+    setRenderTemplate(templateProp);
   }
 
   useEffect(() => {
